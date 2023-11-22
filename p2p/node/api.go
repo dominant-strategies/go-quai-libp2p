@@ -43,6 +43,7 @@ func (p *P2PNode) Start() error {
 	// Is this node expected to have bootstrap peers to dial?
 	if !viper.GetBool(options.BOOTNODE) && len(p.bootpeers) == 0 {
 		log.Warnf("no bootpeers provided. Unable to join network.")
+		return errors.New("no bootpeers provided. Unable to join network")
 	}
 
 	// Start any async processes belonging to this node
