@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/libp2p/go-libp2p"
+	"github.com/libp2p/go-libp2p-autonat"
 	kaddht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -124,12 +125,20 @@ func NewNode(ctx context.Context) (*P2PNode, error) {
 	nodeID := host.ID()
 	log.Infof("node created: %s", nodeID)
 
-	return &P2PNode{
+	node := &P2PNode{
 		ctx:       ctx,
 		Host:      host,
 		bootpeers: bootpeers,
 		dht:       dht,
-	}, nil
+	}
+
+	_, err = autnoat.New(ctx, node)
+	if err != nil {
+		log.Fatalf("error creating autnoat: %s", err)
+		return nil, err
+	}
+
+	return node, nil
 }
 
 // Get the full multi-address to reach our node
