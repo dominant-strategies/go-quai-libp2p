@@ -5,11 +5,11 @@ import (
 	"fmt"
 
 	"github.com/libp2p/go-libp2p"
-	"github.com/libp2p/go-libp2p-autonat"
 	kaddht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/routing"
+	"github.com/libp2p/go-libp2p/p2p/host/autonat"
 	"github.com/libp2p/go-libp2p/p2p/net/connmgr"
 	"github.com/libp2p/go-libp2p/p2p/security/noise"
 	"github.com/multiformats/go-multiaddr"
@@ -132,7 +132,7 @@ func NewNode(ctx context.Context) (*P2PNode, error) {
 		dht:       dht,
 	}
 
-	_, err = autnoat.New(ctx, node)
+	_, err = autonat.New(node)
 	if err != nil {
 		log.Fatalf("error creating autnoat: %s", err)
 		return nil, err
