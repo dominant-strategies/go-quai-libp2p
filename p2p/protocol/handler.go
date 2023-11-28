@@ -1,44 +1,48 @@
 package protocol
 
 import (
-	"bufio"
-
 	"github.com/dominant-strategies/go-quai/log"
 	"github.com/libp2p/go-libp2p/core/network"
-	"github.com/libp2p/go-libp2p/core/protocol"
 )
-
-const ProtocolVersion protocol.ID = "/quai/1.0.0"
 
 func QuaiProtocolHandler(stream network.Stream) {
 	defer stream.Close()
 
-	log.Debugf("Received a new stream!")
+	log.Debugf("Received a new stream from %s", stream.Conn().RemotePeer())
 
 	// if there is a protocol mismatch, close the stream
 	if stream.Protocol() != ProtocolVersion {
 		log.Warnf("Invalid protocol: %s", stream.Protocol())
+		// TODO: add logic to drop the peer
 		return
 	}
 
-	buf := bufio.NewReader(stream)
-	request, err := buf.ReadString('\n')
+	msg, err := readQuaiMessage(stream)
 	if err != nil {
-		log.Errorf("error reading from stream: %s", err)
+		log.Warnf("Error reading message from stream: %s", err)
 		return
 	}
-	log.Debugf("Received data: %s", request)
+	log.Debugf("Received message: %+v", msg)
 
-	// send a response
-	response := "Hello from the other side!\n"
+	switch msg.Flag {
+	case joinFlag:
+		// process join request
+		if err := processJoinRequest(stream); err != nil {
+			log.Warnf("Error processing join request: %s", err)
+		}
+	// TODO: handle other requests
+	default:
+		log.Warnf("invalid message: %+v", msg)
+		// send error response
+		responseMessage := QuaiProtocolMessage{
+			Flag: errorFlag,
+		}
+		// TODO: add error message and/or error code
 
-	// write response to stream
-	_, err = stream.Write([]byte(response))
-
-	if err != nil {
-		log.Errorf("error writing to stream: %s", err)
-		return
+		if err := writeQuaiMessage(stream, &responseMessage); err != nil {
+			log.Warnf("error writing error response to stream: %s", err)
+		}
+		log.Debugf("Sent error response: %+v", responseMessage)
 	}
 
-	log.Debugf("Sent response: '%s'. Closing stream...", response)
 }

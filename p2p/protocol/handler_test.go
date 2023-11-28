@@ -1,7 +1,6 @@
-package protocol_test
+package protocol
 
 import (
-	"bufio"
 	"context"
 	"testing"
 	"time"
@@ -11,8 +10,6 @@ import (
 	mocknet "github.com/libp2p/go-libp2p/p2p/net/mock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	quaiprotocol "github.com/dominant-strategies/go-quai/p2p/protocol"
 )
 
 func TestQuaiProtocolHandler(t *testing.T) {
@@ -33,19 +30,37 @@ func TestQuaiProtocolHandler(t *testing.T) {
 	require.NoError(t, err)
 
 	tests := []struct {
-		name            string
-		ProtocolVersion protocol.ID
-		wantErr         bool
+		name              string
+		ProtocolVersion   protocol.ID
+		Message           QuaiProtocolMessage
+		ExpectedStreamErr bool
+		ExpectedFlag      byte
 	}{
 		{
-			name:            "valid protocol",
-			ProtocolVersion: quaiprotocol.ProtocolVersion,
-			wantErr:         false,
+			name:            "join network success",
+			ProtocolVersion: ProtocolVersion,
+			Message: QuaiProtocolMessage{
+				Flag: joinFlag,
+			},
+			ExpectedStreamErr: false,
+			ExpectedFlag:      welcomeFlag,
 		},
 		{
 			name:            "invalid protocol",
 			ProtocolVersion: "invalid",
-			wantErr:         true,
+			Message: QuaiProtocolMessage{
+				Flag: joinFlag,
+			},
+			ExpectedStreamErr: true,
+		},
+		{
+			name:            "invalid flag",
+			ProtocolVersion: ProtocolVersion,
+			Message: QuaiProtocolMessage{
+				Flag: 0x00,
+			},
+			ExpectedStreamErr: false,
+			ExpectedFlag:      errorFlag,
 		},
 	}
 	for _, tt := range tests {
@@ -53,34 +68,24 @@ func TestQuaiProtocolHandler(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 
-			// Convert string to protocol.ID type
-			protocolID := protocol.ID(tt.ProtocolVersion)
-
 			// Register protocol handler on host2
-			host2.SetStreamHandler(protocolID, quaiprotocol.QuaiProtocolHandler)
+			host2.SetStreamHandler(ProtocolVersion, QuaiProtocolHandler)
 
 			// Establish a stream from host1 (sender) to host2 (receiver)
-			stream, err := host1.NewStream(ctx, peer.ID(host2.ID()), protocolID)
-			assert.NoError(t, err)
+			stream, err := host1.NewStream(ctx, peer.ID(host2.ID()), tt.ProtocolVersion)
+			if tt.ExpectedStreamErr {
+				assert.Error(t, err)
+				return
+			}
 			defer stream.Close()
 
 			// Send a message to host2
-			_, err = stream.Write([]byte("hello\n"))
+			err = writeQuaiMessage(stream, &tt.Message)
 			assert.NoError(t, err)
 
-			// Read the response from host2
-			buf := bufio.NewReader(stream)
-			response, err := buf.ReadString('\n')
-
-			if tt.wantErr {
-				// Assert the stream is closed
-				assert.Error(t, err)
-			} else {
-				// Assert that the response is as expected
-				assert.NoError(t, err)
-				expectedResponse := "Hello from the other side!\n"
-				assert.Equal(t, expectedResponse, response)
-			}
+			response, err := readQuaiMessage(stream)
+			assert.NoError(t, err)
+			assert.Equal(t, tt.ExpectedFlag, response.Flag)
 		})
 	}
 
