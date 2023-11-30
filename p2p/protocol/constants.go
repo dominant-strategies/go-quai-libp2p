@@ -11,7 +11,11 @@ const (
 	joinFlag byte = 0x01
 	// flag to indicate welcome message from the responder node
 	welcomeFlag byte = 0x02
+	// flag to indicate a challenge (nonce) from the responder node
+	challengeFlag byte = 0x03
+	// flag to indicate a response to the challenge from the initiator node
+	challengeResponseFlag byte = 0x04
 	// TODO: should we define different error codes?
 	// flag to indicate error message from the responder node
-	errorFlag byte = 0x03
+	errorFlag byte = 0x05
 )
