@@ -3,6 +3,9 @@ package protocol
 import (
 	"bufio"
 	"encoding/json"
+	"time"
+
+	"github.com/pkg/errors"
 
 	"github.com/libp2p/go-libp2p/core/network"
 )
@@ -18,16 +21,11 @@ type QuaiProtocolMessage struct {
 
 const (
 	// timeout in seconds before a read/write operation on the stream is considered failed
-	TIMEOUT = 10
+	TIMEOUT = 10 * time.Second
 )
 
 // Reads the message from the stream and returns a QuaiProtocolMessage
 func readQuaiMessage(stream network.Stream) (*QuaiProtocolMessage, error) {
-	// TODO: should we set a deadline for the read operation?
-	// err := stream.SetDeadline(time.Now().Add(TIMEOUT * time.Second))
-	// if err != nil {
-	// 	return nil, err
-	// }
 	buf := bufio.NewReader(stream)
 	requestJSON, err := buf.ReadString('\n')
 	if err != nil {
@@ -44,13 +42,32 @@ func readQuaiMessage(stream network.Stream) (*QuaiProtocolMessage, error) {
 	return &requestMessage, nil
 }
 
+// helper function to read a QuaiProtocolMessage with a timeout
+func readQuaiMessageWithTimeout(stream network.Stream) (*QuaiProtocolMessage, error) {
+	msgChan := make(chan *QuaiProtocolMessage, 1)
+	errChan := make(chan error, 1)
+
+	go func() {
+		msg, err := readQuaiMessage(stream)
+		if err != nil {
+			errChan <- err
+			return
+		}
+		msgChan <- msg
+	}()
+
+	select {
+	case msg := <-msgChan:
+		return msg, nil // Message received
+	case err := <-errChan:
+		return nil, err // Error occurred
+	case <-time.After(TIMEOUT):
+		return nil, errors.New("timeout waiting for message")
+	}
+}
+
 // Writes the given QuaiProtocolMessage to the stream
 func writeQuaiMessage(stream network.Stream, message *QuaiProtocolMessage) error {
-	// TODO: should we set a deadline for the write operation?
-	// err := stream.SetDeadline(time.Now().Add(TIMEOUT * time.Second))
-	// if err != nil {
-	// 	return err
-	// }
 	messageJSON, err := json.Marshal(message)
 	if err != nil {
 		return err
@@ -62,4 +79,24 @@ func writeQuaiMessage(stream network.Stream, message *QuaiProtocolMessage) error
 		return err
 	}
 	return nil
+}
+
+// helper function to write a QuaiProtocolMessage with a timeout
+func writeQuaiMessageWithTimeout(stream network.Stream, message *QuaiProtocolMessage) error {
+	errChan := make(chan error, 1)
+
+	go func() {
+		err := writeQuaiMessage(stream, message)
+		if err != nil {
+			errChan <- err
+			return
+		}
+	}()
+
+	select {
+	case err := <-errChan:
+		return err
+	case <-time.After(TIMEOUT):
+		return errors.New("timeout waiting for message")
+	}
 }
