@@ -8,7 +8,6 @@ import (
 	"github.com/golang/mock/gomock"
 
 	"github.com/dominant-strategies/go-quai/p2p/protocol/mocks"
-	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/stretchr/testify/assert"
 )
@@ -22,8 +21,8 @@ func TestJoinNetwork(t *testing.T) {
 	mnet := generateMockNetwork(t, 2)
 	bootNodes := mnet.Hosts()
 
+	// set protocol handler
 	for _, bootNode := range bootNodes {
-		// set protocol handler
 		bootNode.SetStreamHandler(ProtocolVersion, QuaiProtocolHandler)
 	}
 
@@ -37,7 +36,7 @@ func TestJoinNetwork(t *testing.T) {
 		Addrs: bootNodes[1].Addrs(),
 	}
 
-	testNode, _ := generateTestPeer(t, mnet)
+	testNode := generateTestPeer(t, mnet)
 
 	tests := []struct {
 		name     string
@@ -53,8 +52,8 @@ func TestJoinNetwork(t *testing.T) {
 				mockedQuaiNode.EXPECT().NewStream(gomock.Eq(bootNodeAddr1.ID), gomock.Eq(ProtocolVersion)).Return(testNode.NewStream(ctx, bootNodeAddr1.ID, ProtocolVersion)).Times(1)
 				mockedQuaiNode.EXPECT().NewStream(gomock.Eq(bootNodeAddr2.ID), gomock.Eq(ProtocolVersion)).Return(testNode.NewStream(ctx, bootNodeAddr2.ID, ProtocolVersion)).Times(1)
 				mockedQuaiNode.EXPECT().SignChallenge(gomock.Any()).DoAndReturn(
-					func(hash []byte) ([]byte, error) {
-						return signMessage(hash, testNode)
+					func(nonce []byte) ([]byte, error) {
+						return signChallenge(t, nonce, testNode), nil
 					}).Times(2)
 			},
 			WantErr: false,
@@ -76,8 +75,8 @@ func TestJoinNetwork(t *testing.T) {
 				mockedQuaiNode.EXPECT().NewStream(gomock.Eq(bootNodeAddr1.ID), gomock.Eq(ProtocolVersion)).Return(nil, mockErr).Times(1)
 				mockedQuaiNode.EXPECT().NewStream(gomock.Eq(bootNodeAddr2.ID), gomock.Eq(ProtocolVersion)).Return(testNode.NewStream(ctx, bootNodeAddr2.ID, ProtocolVersion)).Times(1)
 				mockedQuaiNode.EXPECT().SignChallenge(gomock.Any()).DoAndReturn(
-					func(hash []byte) ([]byte, error) {
-						return signMessage(hash, testNode)
+					func(nonce []byte) ([]byte, error) {
+						return signChallenge(t, nonce, testNode), nil
 					}).Times(1)
 			},
 			WantErr: false,
@@ -109,13 +108,4 @@ func TestJoinNetwork(t *testing.T) {
 		})
 	}
 
-}
-
-// helper function to be used in the mocked framework
-func signMessage(hash []byte, h host.Host) ([]byte, error) {
-	privKey := h.Peerstore().PrivKey(h.ID())
-	if privKey == nil {
-		return nil, fmt.Errorf("no private key for node %s", h.ID())
-	}
-	return privKey.Sign(hash[:])
 }

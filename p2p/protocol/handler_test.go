@@ -2,10 +2,9 @@ package protocol
 
 import (
 	"context"
-	"crypto/sha256"
 	"testing"
 
-	"github.com/libp2p/go-libp2p/core/crypto"
+	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
 
 	"github.com/libp2p/go-libp2p/core/protocol"
@@ -21,13 +20,13 @@ func TestQuaiProtocolHandler3(t *testing.T) {
 	bootstrapNode.SetStreamHandler(ProtocolVersion, QuaiProtocolHandler)
 
 	// add peer to mock network with a private key
-	clientNode, privKey := generateTestPeer(t, mnet)
+	clientNode := generateTestPeer(t, mnet)
 
 	tests := []struct {
 		name                  string
 		ProtocolVersion       protocol.ID
 		JoinMessage           QuaiProtocolMessage
-		PrivKey               crypto.PrivKey
+		Signer                host.Host
 		ChallengeResponseFlag byte
 		ExpectStreamClose     bool
 		ExpectJoinSuccess     bool
@@ -38,7 +37,7 @@ func TestQuaiProtocolHandler3(t *testing.T) {
 			JoinMessage: QuaiProtocolMessage{
 				Flag: joinFlag,
 			},
-			PrivKey:               privKey,
+			Signer:                clientNode,
 			ChallengeResponseFlag: challengeResponseFlag,
 			ExpectStreamClose:     false,
 			ExpectJoinSuccess:     true,
@@ -62,8 +61,7 @@ func TestQuaiProtocolHandler3(t *testing.T) {
 			assert.NoError(t, err)
 
 			// Sign the challenge and send it back to the bootstrap node
-			signature, err := singChallenge(response.Data, tt.PrivKey)
-			assert.NoError(t, err)
+			signature := signChallenge(t, response.Data, tt.Signer)
 
 			// Send challenge response to bootstrap node
 			challengeResponse := QuaiProtocolMessage{
@@ -81,9 +79,4 @@ func TestQuaiProtocolHandler3(t *testing.T) {
 
 		})
 	}
-}
-
-func singChallenge(nonce []byte, privKey crypto.PrivKey) ([]byte, error) {
-	hash := sha256.Sum256(nonce)
-	return privKey.Sign(hash[:])
 }

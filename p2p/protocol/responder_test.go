@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/libp2p/go-libp2p/core/crypto"
+	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -24,34 +25,33 @@ func TestProcessJoinRequest(t *testing.T) {
 	})
 
 	// add peer to mock network with a private key
-	clientNode, privKey := generateTestPeer(t, mnet)
+	clientNode := generateTestPeer(t, mnet)
 
-	// Another private key to test signature verification
-	privKey2, _, err := crypto.GenerateEd25519Key(rand.Reader)
-	require.NoError(t, err)
+	// add another (bad) peer to mock network with a private key
+	badNode := generateTestPeer(t, mnet)
 
 	tests := []struct {
 		name                  string
 		challengeResponseFlag byte
-		privKey               crypto.PrivKey
+		clientNode            host.Host
 		wantErrResp           bool
 	}{
 		{
 			name:                  "join network success",
 			challengeResponseFlag: challengeResponseFlag,
-			privKey:               privKey,
+			clientNode:            clientNode,
 			wantErrResp:           false,
 		},
 		{
 			name:                  "sign message with wrong private key",
 			challengeResponseFlag: challengeResponseFlag,
-			privKey:               privKey2,
+			clientNode:            badNode,
 			wantErrResp:           true,
 		},
 		{
 			name:                  "invalid challenge response flag",
 			challengeResponseFlag: 0x00,
-			privKey:               privKey,
+			clientNode:            clientNode,
 			wantErrResp:           true,
 		},
 	}
@@ -69,10 +69,7 @@ func TestProcessJoinRequest(t *testing.T) {
 
 			// 2. client should send a QuaiProtocolMessage with the signed challenge
 			// Sign the challenge
-			challenge := challengeMsg.Data
-			hash := sha256.Sum256(challenge)
-			signature, err := tt.privKey.Sign(hash[:])
-			assert.NoError(t, err)
+			signature := signChallenge(t, challengeMsg.Data, tt.clientNode)
 
 			// Send signature to bootstrap node
 			challengeResponseMsg := QuaiProtocolMessage{

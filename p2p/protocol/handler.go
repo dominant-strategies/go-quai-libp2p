@@ -26,10 +26,12 @@ func QuaiProtocolHandler(stream network.Stream) {
 
 	switch msg.Flag {
 	case joinFlag:
-		// process join request
+		// process peer's join request
+		log.Debugf("Processing join request...")
 		if err := processJoinRequest(stream); err != nil {
 			log.Warnf("Error processing join request: %s", err)
 		}
+
 	// TODO: handle other requests
 	default:
 		log.Warnf("invalid message: %+v", msg)

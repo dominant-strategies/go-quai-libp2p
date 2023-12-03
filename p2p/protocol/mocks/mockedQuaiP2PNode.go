@@ -92,3 +92,18 @@ func (mr *MockQuaiP2PNodeMockRecorder) NewStream(peerID, protocolID interface{})
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewStream", reflect.TypeOf((*MockQuaiP2PNode)(nil).NewStream), peerID, protocolID)
 }
+
+// SignChallenge mocks base method.
+func (m *MockQuaiP2PNode) SignChallenge(arg0 []byte) ([]byte, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SignChallenge", arg0)
+	ret0, _ := ret[0].([]byte)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SignChallenge indicates an expected call of SignChallenge.
+func (mr *MockQuaiP2PNodeMockRecorder) SignChallenge(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SignChallenge", reflect.TypeOf((*MockQuaiP2PNode)(nil).SignChallenge), arg0)
+}

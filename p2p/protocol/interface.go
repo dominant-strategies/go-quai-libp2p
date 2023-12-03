@@ -13,4 +13,6 @@ type QuaiP2PNode interface {
 	Connect(pi peer.AddrInfo) error
 	NewStream(peerID peer.ID, protocolID protocol.ID) (network.Stream, error)
 	Network() network.Network
+	// Signs the sha256 hash of the nonce and returns the signature
+	SignChallenge(nonce []byte) (signature []byte, err error)
 }
