@@ -22,3 +22,8 @@ help:
 mocks:
 	@echo "Generating mocks"
 	@ mockgen -package mocks -destination p2p/protocol/mocks/mockedQuaiP2PNode.go -source=p2p/protocol/interface.go QuaiP2PNode
+
+## run unit tests
+test:
+	@echo "Running unit tests"
+	@go test -v ./...

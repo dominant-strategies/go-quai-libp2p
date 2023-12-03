@@ -8,24 +8,19 @@ import (
 	"github.com/golang/mock/gomock"
 
 	"github.com/dominant-strategies/go-quai/p2p/protocol/mocks"
+	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
-	mocknet "github.com/libp2p/go-libp2p/p2p/net/mock"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestJoinNetwork(t *testing.T) {
 	// vars used in mock stubs
 	ctx := context.Background()
-	mockErr := fmt.Errorf("error")
+	mockErr := fmt.Errorf("mock error")
 
-	// Create a mock network
-	mnet, err := mocknet.FullMeshLinked(3) // 1 test node and 2 bootnodes
-	require.NoError(t, err)
-
-	// Extract test node and bootnodes
-	testNode := mnet.Hosts()[0]
-	bootNodes := mnet.Hosts()[1:]
+	// Create a mock network with 2 bootnodes
+	mnet := generateMockNetwork(t, 2)
+	bootNodes := mnet.Hosts()
 
 	for _, bootNode := range bootNodes {
 		// set protocol handler
@@ -42,6 +37,8 @@ func TestJoinNetwork(t *testing.T) {
 		Addrs: bootNodes[1].Addrs(),
 	}
 
+	testNode, _ := generateTestPeer(t, mnet)
+
 	tests := []struct {
 		name     string
 		mockStub func(*mocks.MockQuaiP2PNode)
@@ -55,6 +52,10 @@ func TestJoinNetwork(t *testing.T) {
 				mockedQuaiNode.EXPECT().Network().Return(testNode.Network()).Times(1)
 				mockedQuaiNode.EXPECT().NewStream(gomock.Eq(bootNodeAddr1.ID), gomock.Eq(ProtocolVersion)).Return(testNode.NewStream(ctx, bootNodeAddr1.ID, ProtocolVersion)).Times(1)
 				mockedQuaiNode.EXPECT().NewStream(gomock.Eq(bootNodeAddr2.ID), gomock.Eq(ProtocolVersion)).Return(testNode.NewStream(ctx, bootNodeAddr2.ID, ProtocolVersion)).Times(1)
+				mockedQuaiNode.EXPECT().SignChallenge(gomock.Any()).DoAndReturn(
+					func(hash []byte) ([]byte, error) {
+						return signMessage(hash, testNode)
+					}).Times(2)
 			},
 			WantErr: false,
 		},
@@ -74,6 +75,10 @@ func TestJoinNetwork(t *testing.T) {
 				mockedQuaiNode.EXPECT().Network().Return(testNode.Network()).Times(1)
 				mockedQuaiNode.EXPECT().NewStream(gomock.Eq(bootNodeAddr1.ID), gomock.Eq(ProtocolVersion)).Return(nil, mockErr).Times(1)
 				mockedQuaiNode.EXPECT().NewStream(gomock.Eq(bootNodeAddr2.ID), gomock.Eq(ProtocolVersion)).Return(testNode.NewStream(ctx, bootNodeAddr2.ID, ProtocolVersion)).Times(1)
+				mockedQuaiNode.EXPECT().SignChallenge(gomock.Any()).DoAndReturn(
+					func(hash []byte) ([]byte, error) {
+						return signMessage(hash, testNode)
+					}).Times(1)
 			},
 			WantErr: false,
 		},
@@ -104,4 +109,13 @@ func TestJoinNetwork(t *testing.T) {
 		})
 	}
 
+}
+
+// helper function to be used in the mocked framework
+func signMessage(hash []byte, h host.Host) ([]byte, error) {
+	privKey := h.Peerstore().PrivKey(h.ID())
+	if privKey == nil {
+		return nil, fmt.Errorf("no private key for node %s", h.ID())
+	}
+	return privKey.Sign(hash[:])
 }
