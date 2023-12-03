@@ -1,6 +1,7 @@
 package node
 
 import (
+	"crypto/sha256"
 	"time"
 
 	"github.com/pkg/errors"
@@ -158,4 +159,10 @@ func (p *P2PNode) NewStream(peerID peer.ID, protocolID protocol.ID) (network.Str
 // Connects to the given peer
 func (p *P2PNode) Connect(pi peer.AddrInfo) error {
 	return p.Host.Connect(p.ctx, pi)
+}
+
+// Signs the sha256 hash of the nonce and returns the signature
+func (p *P2PNode) SignChallenge(nonce []byte) ([]byte, error) {
+	hash := sha256.Sum256(nonce)
+	return p.Host.Peerstore().PrivKey(p.Host.ID()).Sign(hash[:])
 }
