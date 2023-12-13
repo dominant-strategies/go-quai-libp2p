@@ -1,6 +1,7 @@
 package node
 
 import (
+	"context"
 	"time"
 
 	"github.com/pkg/errors"
@@ -12,6 +13,8 @@ import (
 	"github.com/dominant-strategies/go-quai/log"
 	"github.com/dominant-strategies/go-quai/p2p"
 	quaiprotocol "github.com/dominant-strategies/go-quai/p2p/protocol"
+
+	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
@@ -147,4 +150,31 @@ func (p *P2PNode) NewStream(peerID peer.ID, protocolID protocol.ID) (network.Str
 // Connects to the given peer
 func (p *P2PNode) Connect(pi peer.AddrInfo) error {
 	return p.Host.Connect(p.ctx, pi)
+}
+
+// Start gossipsub protocol
+func (p *P2PNode) StartGossipSub(ctx context.Context) error {
+	ps, err := pubsub.NewGossipSub(ctx, p.Host,
+		// TODO: Include peer scoring
+	)
+	if err != nil {
+		return err
+	}
+	p.pubsub = ps
+	p.subscriptions = []*pubsub.Subscription{}
+
+	p.consensus.GetRunningSlices()
+
+	for _, slice := range p.consensus.GetRunningSlices() {
+		sliceSub, err := ps.Join(slice.String())
+		if err != nil {
+			return err
+		}
+		subscription, err := sliceSub.Subscribe()
+		if err != nil {
+			return err
+		}
+		p.subscriptions = append(p.subscriptions, subscription)
+	}
+	return nil
 }

@@ -8,6 +8,7 @@ import (
 	"github.com/libp2p/go-libp2p"
 	kaddht "github.com/libp2p/go-libp2p-kad-dht"
 	dual "github.com/libp2p/go-libp2p-kad-dht/dual"
+	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/routing"
@@ -34,8 +35,15 @@ type P2PNode struct {
 	// List of peers to introduce us to the network
 	bootpeers []peer.AddrInfo
 
+	// TODO: Consolidate into network interface, and consensus interface
 	// DHT instance
 	dht *dual.DHT
+
+	// Gossipsub instance
+	pubsub *pubsub.PubSub
+
+	// Gossipsub subscriptions
+	subscriptions []*pubsub.Subscription
 
 	// runtime context
 	ctx context.Context
@@ -118,7 +126,7 @@ func NewNode(ctx context.Context) (*P2PNode, error) {
 						return bootpeers
 					}),
 					kaddht.ProtocolPrefix("/quai"),
-					kaddht.RoutingTableRefreshPeriod(1 * time.Minute),
+					kaddht.RoutingTableRefreshPeriod(1*time.Minute),
 				),
 			)
 			return dht, err
