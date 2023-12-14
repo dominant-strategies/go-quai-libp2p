@@ -33,6 +33,7 @@ const (
 	DefaultHTTPPort = 8545        // Default TCP port for the HTTP RPC server
 	DefaultWSHost   = "localhost" // Default host interface for the websocket RPC server
 	DefaultWSPort   = 8546        // Default TCP port for the websocket RPC server
+	MaxWidth        = 16          // Width of the network ontology
 )
 
 var (
@@ -70,6 +71,10 @@ var EthConfigDefaults = EthConfig{
 	RPCTxFeeCap: 1, // 1 ether
 	DomUrl:      "ws://127.0.0.1:8546",
 	SubUrls:     []string{"ws://127.0.0.1:8546", "ws://127.0.0.1:8546", "ws://127.0.0.1:8546"},
+}
+
+type XDGConfig struct {
+	CoinbaseAddresses map[string]string `toml:"coinbaseAddresses"`
 }
 
 type EthConfig struct {

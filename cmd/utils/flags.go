@@ -1,13 +1,17 @@
 package utils
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
+	"regexp"
 	"strings"
 	"time"
 
 	"github.com/adrg/xdg"
 	"github.com/dominant-strategies/go-quai/common/constants"
 	"github.com/dominant-strategies/go-quai/log"
+	"github.com/pelletier/go-toml/v2"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -32,6 +36,7 @@ var NodeFlags = []Flag{
 	MaxPeersFlag,
 	LocationFlag,
 	SoloFlag,
+	CoinbaseAddressFlag,
 	DBEngineFlag,
 	KeystoreDirFlag,
 	NoUSBFlag,
@@ -84,7 +89,6 @@ var NodeFlags = []Flag{
 	CachePreimagesFlag,
 	ConsensusEngineFlag,
 	MinerGasPriceFlag,
-	MinerEtherbaseFlag,
 	UnlockedAccountFlag,
 	PasswordFileFlag,
 	ExternalSignerFlag,
@@ -551,11 +555,6 @@ var (
 		Value: newBigIntValue(EthConfigDefaults.Miner.GasPrice),
 		Usage: "Minimum gas price for mining a transaction" + generateEnvDoc("miner.gasprice"),
 	}
-	MinerEtherbaseFlag = Flag{
-		Name:  "miner.etherbase",
-		Value: "0",
-		Usage: "Public address for block mining rewards (default = first account)" + generateEnvDoc("miner.etherbase"),
-	}
 	// Account settings
 	UnlockedAccountFlag = Flag{
 		Name:  "unlock",
@@ -856,7 +855,69 @@ var (
 		Value: EthConfigDefaults.DomUrl,
 		Usage: "Subordinate chain websocket urls" + generateEnvDoc("sub.urls"),
 	}
+	CoinbaseAddressFlag = Flag{
+		Name:  "coinbase",
+		Value: "",
+		Usage: "Input TOML string or path to TOML file" + generateEnvDoc("coinbase"),
+	}
 )
+
+func ParseCoinbaseAddresses() error {
+	var coinbaseMap map[string]string
+
+	// Tries to read from XDG Config
+	configFile := viper.GetString("config-dir") + "config.toml"
+	if _, err := os.Stat(configFile); err == nil {
+		fileContent, err := os.ReadFile(configFile)
+		if err != nil {
+			log.Fatalf("Failed to read config file: %s", err)
+			return err
+		}
+
+		var config XDGConfig
+		if err := toml.Unmarshal(fileContent, &config); err != nil {
+			log.Fatalf("Invalid TOML in config file: %s", err)
+			return err
+		}
+		coinbaseMap = config.CoinbaseAddresses
+	}
+
+	// Checks for CLI input
+	coinbaseInput := viper.GetString("coinbase")
+	if coinbaseInput != "" {
+		if err := json.Unmarshal([]byte(coinbaseInput), &coinbaseMap); err != nil {
+			log.Fatalf("Failed to parse CLI input as JSON: %s", err)
+			return err
+		}
+	}
+
+	log.Info("Coinbase addresses:" + fmt.Sprintf("%v", coinbaseMap))
+
+	// Validates all addresses in coinbaseMap
+	for shard, address := range coinbaseMap {
+		if err := isValidAddress(address, shard); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func isValidAddress(address string, shard string) error {
+	re := regexp.MustCompile(`^(0x)?[0-9a-fA-F]{40}$`)
+	if !re.MatchString(address) {
+		log.Fatalf("Invalid Ethereum address: %s", address)
+		return fmt.Errorf("invalid Ethereum address: %s", address)
+	}
+
+	// Trim "0x" prefix if present and check if the first byte matches the key
+	trimmedAddress := strings.TrimPrefix(address, "0x")
+	if !strings.HasPrefix(trimmedAddress, shard) {
+		log.Fatalf("Shard Location %s does not match the first byte of the address %s", shard, address)
+		return fmt.Errorf("shard location %s does not match the first byte of the address %s", shard, address)
+	}
+	return nil
+}
 
 func CreateAndBindFlag(flag Flag, cmd *cobra.Command) {
 	switch val := flag.Value.(type) {
