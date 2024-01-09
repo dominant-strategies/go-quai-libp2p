@@ -7,6 +7,10 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/viper"
 
+	"github.com/libp2p/go-libp2p/core/network"
+	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/libp2p/go-libp2p/core/protocol"
+
 	"github.com/dominant-strategies/go-quai/cmd/utils"
 	"github.com/dominant-strategies/go-quai/core/types"
 	"github.com/dominant-strategies/go-quai/log"
@@ -15,9 +19,6 @@ import (
 	"github.com/dominant-strategies/go-quai/quai"
 
 	"github.com/dominant-strategies/go-quai/common"
-	"github.com/libp2p/go-libp2p/core/network"
-	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/libp2p/go-libp2p/core/protocol"
 )
 
 // Starts the node and all of its services
@@ -218,4 +219,3 @@ func (p *P2PNode) handleBroadcast(data interface{}) {
 		// TODO: ban the peer which sent it?
 	}
 }
-
