@@ -34,9 +34,14 @@ message SliceID {
     uint32 zone = 3;
 }
 
+message Hash {
+    bytes hash = 1; // hash is an array of 32 bytes
+   
+}
+
 // Define a block structure
 message Block {
-    string hash = 1;               // Unique identifier of the block
+    Hash hash = 1;               // Unique identifier of the block
     string parentHash = 2;         // Hash of the parent block
     uint64 number = 3;             // Block number
     string stateRoot = 4;          // Root of the state trie
@@ -48,7 +53,7 @@ message Block {
 
 // Define a transaction structure
 message Transaction {
-    string hash = 1;         // Unique identifier of the transaction
+    Hash hash = 1;         // Unique identifier of the transaction
     string from = 2;         // Sender address
     string to = 3;           // Recipient address (empty for contract creation)
     uint64 nonce = 4;        // Nonce of the sender
@@ -62,7 +67,7 @@ message Transaction {
 // Request and response messages for block and transaction queries
 message BlockRequest {
     SliceID sliceId = 1;
-    string hash = 2;
+    Hash hash = 2;
 }
 
 message BlockResponse {
@@ -71,7 +76,7 @@ message BlockResponse {
 }
 
 message TransactionRequest {
-    string hash = 1;
+    Hash hash = 1;
 }
 
 message TransactionResponse {
