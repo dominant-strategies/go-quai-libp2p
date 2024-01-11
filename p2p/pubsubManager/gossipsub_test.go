@@ -5,9 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dominant-strategies/go-quai/p2p/pb"
-	"google.golang.org/protobuf/proto"
-
+	"github.com/dominant-strategies/go-quai/consensus/types"
 	mocknet "github.com/libp2p/go-libp2p/p2p/net/mock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -31,43 +29,56 @@ func TestPublishSubscribeBlock(t *testing.T) {
 	// Connect the two nodes
 	err = mnet.LinkAll()
 	require.NoError(t, err)
-	// err = mnet.ConnectAllButSelf()
+	err = mnet.ConnectAllButSelf()
 	require.NoError(t, err)
 
 	// Setup GossipSub
-	ps1, err := NewGossipSubManager(ctx, host1)
+	gm1, err := NewGossipSubManager(ctx, host1)
 	require.NoError(t, err)
-	ps2, err := NewGossipSubManager(ctx, host2)
+	gm2, err := NewGossipSubManager(ctx, host2)
 	require.NoError(t, err)
 
-	// Subscribe to the topic on the second node
-	sub, err := ps2.SubscribeBlock()
-	assert.NoError(t, err)
-
-	// Create a block and serialize it
-	block := &pb.Block{
-		Hash: "test",
+	// Subscribe to the block topic on both nodes
+	slice := types.SliceID{
+		Region: 0,
+		Zone:   0,
 	}
-	data, err := proto.Marshal(block)
+	block := types.Block{}
+	err = gm1.Subscribe(slice, block)
 	assert.NoError(t, err)
+	err = gm2.Subscribe(slice, block)
+	assert.NoError(t, err)
+	time.Sleep(time.Second) // Allow time for subscription to be established
+
+	// define a callback function to handle received data via gossipsub
+	dataChan := make(chan interface{})
+	cb := func(data interface{}) {
+		dataChan <- data
+	}
+
+	// Start the gossipsub manager on second node
+	gm2.Start(cb)
+
+	// Create a mock block to publish
+	mockHash := types.Hash{0x7e, 0x1c, 0x7c, 0x7e, 0x1c, 0x7c, 0x7e, 0x1c, 0x7c, 0x7e, 0x1c, 0x7c, 0x7e, 0x1c, 0x7c, 0x7e, 0x1c, 0x7c, 0x7e, 0x1c, 0x7c, 0x7e, 0x1c, 0x7c, 0x7e, 0x1c, 0x7c, 0x7e, 0x1c, 0x7c}
+	mockBlock := types.Block{
+		Hash: mockHash,
+	}
 
 	// Publish the block on the first node
-	err = ps1.PublishBlock(data)
+	err = gm1.Broadcast(slice, mockBlock)
 	assert.NoError(t, err)
 
 	// Wait for the message to be received on the second node
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-	msg, err := sub.Next(ctx)
-	if err != nil {
-		t.Fatalf("did not receive message before timeout")
+	select {
+	case msg := <-dataChan:
+		// Check if the received message is a block
+		receivedBlock, ok := msg.(types.Block)
+		assert.True(t, ok)
+		// Check if the received block is equal to the mock block
+		assert.Equal(t, mockBlock, receivedBlock)
+
+	case <-time.After(5 * time.Second):
+		t.Fatal("timeout waiting for message")
 	}
-
-	// Deserialize the received data
-	var receivedBlock pb.Block
-	err = proto.Unmarshal(msg.Data, &receivedBlock)
-	assert.NoError(t, err)
-
-	// Assert that the received block is the same as the one sent
-	assert.Equal(t, block.Hash, receivedBlock.Hash)
 }
