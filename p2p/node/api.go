@@ -173,7 +173,8 @@ func (p *P2PNode) RequestTransaction(hash types.Hash, loc types.SliceID) chan *t
 }
 
 func (p *P2PNode) ReportBadPeer(peer p2p.PeerID) {
-	panic("todo")
+	p.blockList[peer] = struct{}{}
+	p.Host.Network().ClosePeer(peer)
 }
 
 // Returns the list of bootpeers

@@ -38,6 +38,9 @@ type P2PNode struct {
 	// List of peers to introduce us to the network
 	bootpeers []peer.AddrInfo
 
+	// Set of nodes to block connections to/from
+	blockList map[peer.ID]struct{}
+
 	// TODO: Consolidate into network interface, and consensus interface
 	// DHT instance
 	dht *dual.DHT
@@ -76,6 +79,8 @@ func NewNode(ctx context.Context) (*P2PNode, error) {
 		log.Fatalf("error creating libp2p connection manager: %s", err)
 		return nil, err
 	}
+
+	blockList := make(map[peer.ID]struct{})
 
 	// Create the libp2p host
 	var dht *dual.DHT
@@ -120,6 +125,9 @@ func NewNode(ctx context.Context) (*P2PNode, error) {
 		// Attempt to open a direct connection with relayed peers, using relay
 		// nodes to coordinate the holepunch.
 		libp2p.EnableHolePunching(),
+
+		// Create a connection gater that will reject connections from peers in the blocklist
+		libp2p.ConnectionGater(pubsubManager.NewConnGater(&blockList)),
 
 		// Let this host use the DHT to find other hosts
 		libp2p.Routing(func(h host.Host) (routing.PeerRouting, error) {
