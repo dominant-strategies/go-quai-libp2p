@@ -19,6 +19,11 @@ message QuaiProtocolMessage {
   bytes data = 2; // Encoded payload specific to the action
 }
 
+message Hash {
+    bytes hash = 1; // hash is an array of 32 bytes
+   
+}
+
 // Define a block structure
 message Block {
   string hash = 1;                       // Unique identifier of the block
@@ -57,7 +62,9 @@ message BlockResponse {
   Block block = 2;
 }
 
-message TransactionRequest { string hash = 1; }
+message TransactionRequest {
+    Hash hash = 1;
+}
 
 message TransactionResponse {
   bool found = 1;
