@@ -5,8 +5,8 @@ import (
 	"github.com/dominant-strategies/go-quai/consensus/types"
 	"github.com/dominant-strategies/go-quai/log"
 	"github.com/dominant-strategies/go-quai/p2p/pb"
-	"github.com/gogo/protobuf/proto"
 	"github.com/libp2p/go-libp2p/core/network"
+	"google.golang.org/protobuf/proto"
 )
 
 func QuaiProtocolHandler(stream network.Stream, node QuaiP2PNode) {
@@ -39,17 +39,25 @@ func QuaiProtocolHandler(stream network.Stream, node QuaiP2PNode) {
 		switch msg := protoMessage.(type) {
 		case *pb.BlockRequest:
 			// get the hash from the block request
-			blockReq := msg
-			hash, err := types.NewHashFromString(blockReq.Hash)
-			if err != nil {
-				log.Errorf("error converting hash from string: %s", err)
-				// TODO: handle error
+			hash := types.Hash{}
+			pbHash := msg.GetHash()
+			if pbHash == nil {
+				log.Errorf("block request did not contain a hash")
+				// handle error
 				return
 			}
-			// get the sliceID from the block request
-			protoSlice := blockReq.SliceId
-			slice := pb.ConvertFromProtoSlice(protoSlice)
-		
+			hash.FromProto(pbHash)
+
+			// get the slice from the block request
+			slice := types.SliceID{}
+			pbSlice := msg.GetSliceId()
+			if pbSlice == nil {
+				log.Errorf("block request did not contain a slice")
+				// handle error
+				return
+			}
+			slice.FromProto(pbSlice)
+
 			// check if we have the block in our cache
 			block := node.GetBlock(hash, slice)
 			if block == nil {
@@ -58,7 +66,7 @@ func QuaiProtocolHandler(stream network.Stream, node QuaiP2PNode) {
 				return
 			}
 			// convert the block to a protocol buffer and send it back to the peer
-			data, err := pb.MarshalBlock(block)
+			data, err := pb.ConvertAndMarshal(block)
 			if err != nil {
 				log.Errorf("error marshalling block: %s", err)
 				// TODO: handle error
