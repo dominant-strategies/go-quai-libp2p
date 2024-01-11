@@ -4,8 +4,8 @@ import (
 	"github.com/dominant-strategies/go-quai/common"
 	"github.com/dominant-strategies/go-quai/log"
 	"github.com/dominant-strategies/go-quai/p2p/pb"
-	"github.com/gogo/protobuf/proto"
 	"github.com/libp2p/go-libp2p/core/network"
+	"google.golang.org/protobuf/proto"
 )
 
 func QuaiProtocolHandler(stream network.Stream, node QuaiP2PNode) {
@@ -51,7 +51,7 @@ func QuaiProtocolHandler(stream network.Stream, node QuaiP2PNode) {
 				return
 			}
 			// convert the block to a protocol buffer and send it back to the peer
-			data, err := pb.MarshalBlock(block)
+			data, err := pb.ConvertAndMarshal(block)
 			if err != nil {
 				log.Errorf("error marshalling block: %s", err)
 				// TODO: handle error
