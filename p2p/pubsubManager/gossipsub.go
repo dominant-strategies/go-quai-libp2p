@@ -3,6 +3,7 @@ package pubsubManager
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"github.com/dominant-strategies/go-quai/consensus/types"
 	"github.com/dominant-strategies/go-quai/log"
@@ -89,7 +90,26 @@ func (g *PubsubManager) Broadcast(slice types.SliceID, data interface{}) error {
 	if err != nil {
 		return err
 	}
-	return g.topics[topicName].Publish(g.ctx, pb.MarshalData(data))
+
+	// verify we are subscribed to the topic
+	if _, ok := g.subscriptions[topicName]; !ok {
+		return errors.New("not subscribed to topic: " + topicName)
+	}
+
+	var pbData []byte
+	switch data := data.(type) {
+	case types.Block:
+		log.Debugf("marshalling block: %+v", data)
+		pbData, err = pb.ConvertAndMarshal(&data)
+		if err != nil {
+			return err
+		}
+	default:
+		return ErrUnsupportedType
+	}
+
+	log.Debugf("publishing data to topic: %s", topicName)
+	return g.topics[topicName].Publish(g.ctx, pbData)
 }
 
 // lists our peers which provide the associated topic
@@ -104,7 +124,9 @@ func (g *PubsubManager) PeersForTopic(slice types.SliceID, data interface{}) ([]
 // handles any data received on any of our subscribed topics
 func (g *PubsubManager) handleSubscriptions() {
 	for {
+		//! TODO: consider using a context with a timeout here or goroutines with select
 		for _, sub := range g.subscriptions {
+			log.Debugf("waiting for next message on subscription: %s", sub.Topic())
 			msg, err := sub.Next(g.ctx)
 			if err != nil {
 				// if context was cancelled, then we are shutting down
@@ -115,16 +137,29 @@ func (g *PubsubManager) handleSubscriptions() {
 				continue
 			}
 
-			// unmarshal the received data
-			block, err := pb.UnmarshalBlock(msg.Data)
-			if err != nil {
-				log.Errorf("error unmarshalling block: %s", err)
+			var data interface{}
+			// unmarshal the received data depending on the topic's type
+			topicType := strings.Split(*msg.Topic, "/")[1]
+			log.Debugf("received message on topic: %s", *msg.Topic)
+			switch topicType {
+			case "blocks":
+				block := types.Block{}
+				err = pb.UnmarshalAndConvert(msg.Data, &block)
+				if err != nil {
+					log.Errorf("error unmarshalling block: %s", err)
+					continue
+				}
+				log.Debugf("received block: %+v", block)
+				data = block
+			default:
+				log.Errorf("unknown topic type: %s", topicType)
 				continue
 			}
 
 			// handle the received data
 			if g.onReceived != nil {
-				g.onReceived(block)
+				log.Debugf("handling received data: %+v", data)
+				g.onReceived(data)
 			}
 		}
 	}
