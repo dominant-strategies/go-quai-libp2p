@@ -1,94 +1,90 @@
 package pb
 
 import (
-	"encoding/hex"
-
-	"github.com/dominant-strategies/go-quai/common"
-	"github.com/dominant-strategies/go-quai/core/types"
 	"github.com/dominant-strategies/go-quai/log"
-	"github.com/gogo/protobuf/proto"
+	"google.golang.org/protobuf/proto"
 )
 
-// converts a custom go Block type (types.Block) to a protocol buffer Block type (pb.Block)
-func MarshalData(data interface{}) []byte {
-	var bytes []byte
-	var err error
-	switch v := data.(type) {
-	case *types.Block:
-		bytes, err = MarshalBlock(v)
-	default:
-		return nil
-	}
-	if err != nil {
-		log.Errorf("Error marshalling data: ", err)
-		return nil
-	} else {
-		return bytes
-	}
-}
-
 // Unmarshals a serialized protobuf slice of bytes into a protocol buffer type
-func UnmarshalProtoMessage(data []byte, pbMsg proto.Message) error {
-	if err := proto.Unmarshal(data, pbMsg); err != nil {
+func UnmarshalProtoMessage(data []byte, msg proto.Message) error {
+	if err := proto.Unmarshal(data, msg); err != nil {
 		return err
 	}
 	return nil
 }
 
 // Marshals a protocol buffer type into a serialized protobuf slice of bytes
-func MarshalProtoMessage(pbMsg proto.Message) ([]byte, error) {
-	data, err := proto.Marshal(pbMsg)
+func MarshalProtoMessage(msg proto.Message) ([]byte, error) {
+	data, err := proto.Marshal(msg)
 	if err != nil {
 		return nil, err
 	}
 	return data, nil
 }
 
-// converts a custom go Block type (types.Block) to a protocol buffer Block type (pb.Block)
-func ConvertToProtoBlock(block types.Block) *Block {
-	return &Block{
-		Hash: hex.EncodeToString(block.Hash().Bytes()),
-		// ... map other fields
-	}
-
+// ProtoConvertable is an interface for types that shall be converted to a protobuf message.
+type ProtoConvertable[T proto.Message] interface {
+	ToProto() T
 }
 
-// converts a protocol buffer Block type (pb.Block) to a custom go Block type (types.Block)
-func ConvertFromProtoBlock(pbBlock *Block) types.Block {
-	var hash common.Hash
-	copy(hash[:], pbBlock.Hash)
-	// ... map other fields
-	return types.Block{
-		// ... map other fields
-	}
+// ConvertToProto converts a ProtoConvertable type to a protobuf message.
+func ConvertToProto[P proto.Message](c ProtoConvertable[P]) P {
+	return c.ToProto()
 }
 
-// Unmarshals a received serialized protobuf slice of bytes into a custom *types.Block type
-func UnmarshalBlock(data []byte) (*types.Block, error) {
-	var pbBlock Block
-	err := UnmarshalProtoMessage(data, &pbBlock)
+// ConvertableFromProto is an interface for types that shall be converted from a protobuf message.
+type ConvertableFromProto[P proto.Message] interface {
+	FromProto(protoMsg P)
+	NewProtoInstance() P
+}
+
+// UnmarshalAndConvert takes a slice of bytes (protobuf serialized data) and
+// unmarshals it into a protobuf message, then converts it to a custom type
+// using the FromProto method. The appropriate protobuf type is determined by the NewProtoInstance interface ConvertableFromProto method.
+func UnmarshalAndConvert[T ConvertableFromProto[P], P proto.Message](data []byte, target T) error {
+	log.Tracef("Unmarshalling protobuf message: %+v", data)
+	protoMsg := target.NewProtoInstance() // Create a new instance of the protobuf message type
+	if err := proto.Unmarshal(data, protoMsg); err != nil {
+		return err
+	}
+	log.Tracef("Unmarshalled protobuf message: %+v", protoMsg)
+	target.FromProto(protoMsg)
+	log.Tracef("Converted protobuf message to custom type: %+v", target)
+	return nil
+}
+
+// ConvertAndMarshal takes a custom type and converts it to a protobuf message using the ToProto method,
+// then marshals it into a slice of bytes (protobuf serialized data).
+func ConvertAndMarshal[T ProtoConvertable[P], P proto.Message](target T) ([]byte, error) {
+	protoMsg := target.ToProto()
+	log.Tracef("Converted custom type to protobuf message: %+v", protoMsg)
+	data, err := proto.Marshal(protoMsg)
 	if err != nil {
 		return nil, err
 	}
-	block := ConvertFromProtoBlock(&pbBlock)
-	return &block, nil
-}
-
-// Marshals a custom *types.Block type into a serialized protobuf slice of bytes
-// to be sent over the wire
-func MarshalBlock(block *types.Block) ([]byte, error) {
-	pbBlock := ConvertToProtoBlock(*block)
-	data, err := MarshalProtoMessage(pbBlock)
-	if err != nil {
-		return nil, err
-	}
+	log.Tracef("Marshalled protobuf message: %+v", data)
 	return data, nil
 }
 
-// Creates a BlockRequest protocol buffer message
-func CreateProtoBlockRequest(hash common.Hash, location common.Location) *BlockRequest {
-	return &BlockRequest{
-		Hash:     hex.EncodeToString(hash[:]),
-		Location: hex.EncodeToString(location),
+// Creates a marshaled protobuf message for a block request.
+func CreateProtoBlockRequest(hash ProtoConvertable[*Hash], slice ProtoConvertable[*SliceID]) ([]byte, error) {
+	blockReq := &BlockRequest{
+		Hash:    hash.ToProto(),
+		SliceId: slice.ToProto(),
 	}
+	return MarshalProtoMessage(blockReq)
+}
+
+// Unmarhsalls a protobuf block response message, and returns a boolean indicating whether the block was found.
+// If the block was found, it returns a *pb.Block, otherwise it returns nil.
+func UnmarshalProtoBlockResponse(data []byte) (bool, *Block, error) {
+	var blockResponse BlockResponse
+	err := UnmarshalProtoMessage(data, &blockResponse)
+	if err != nil {
+		return false, nil, err
+	}
+	if blockResponse.Found {
+		return true, blockResponse.Block, nil
+	}
+	return false, nil, nil
 }
