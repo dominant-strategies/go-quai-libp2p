@@ -18,6 +18,7 @@ const (
 	// Data types for gossipsub topics
 	C_blockType       = "blocks"
 	C_transactionType = "transactions"
+	C_headerType      = "headers"
 )
 
 var (
@@ -40,6 +41,7 @@ func TopicName(location common.Location, data interface{}) (string, error) {
 	case types.Block:
 		return location.Name() + "/blocks", nil
 	default:
+		log.Debugf("unsupported data type: %T", data)
 		return "", ErrUnsupportedType
 	}
 }
@@ -103,18 +105,11 @@ func (g *PubsubManager) Broadcast(location common.Location, data interface{}) er
 		return errors.New("not subscribed to topic: " + topicName)
 	}
 
-	var pbData []byte
-	switch data := data.(type) {
-	case types.Block:
-		log.Debugf("marshalling block: %+v", data)
-		pbData, err = pb.ConvertAndMarshal(&data)
-		if err != nil {
-			return err
-		}
-	default:
-		return ErrUnsupportedType
+	// marshal the data
+	pbData, err := pb.ConvertAndMarshal(data)
+	if err != nil {
+		return err
 	}
-
 	log.Debugf("publishing data to topic: %s", topicName)
 	return g.topics[topicName].Publish(g.ctx, pbData)
 }
@@ -156,8 +151,17 @@ func (g *PubsubManager) handleSubscriptions() {
 					log.Errorf("error unmarshalling block: %s", err)
 					continue
 				}
-				log.Debugf("received block: %+v", block)
+				log.Tracef("received block: %+v", block)
 				data = block
+			case C_headerType:
+				header := types.Header{}
+				err = pb.UnmarshalAndConvert(msg.Data, &header)
+				if err != nil {
+					log.Errorf("error unmarshalling header: %s", err)
+					continue
+				}
+				log.Tracef("received header: %+v", header)
+				data = header
 			default:
 				log.Errorf("unknown topic type: %s", topicType)
 				continue
@@ -165,7 +169,6 @@ func (g *PubsubManager) handleSubscriptions() {
 
 			// handle the received data
 			if g.onReceived != nil {
-				log.Debugf("handling received data: %+v", data)
 				g.onReceived(data)
 			}
 		}

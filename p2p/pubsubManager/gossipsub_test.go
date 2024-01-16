@@ -5,13 +5,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dominant-strategies/go-quai/consensus/types"
+	"github.com/dominant-strategies/go-quai/core/types"
 	mocknet "github.com/libp2p/go-libp2p/p2p/net/mock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestPublishSubscribeBlock(t *testing.T) {
+func TestSubscribeAndBroadcast(t *testing.T) {
 	ctx := context.Background()
 
 	// Create a mock network
@@ -38,16 +38,16 @@ func TestPublishSubscribeBlock(t *testing.T) {
 	gm2, err := NewGossipSubManager(ctx, host2)
 	require.NoError(t, err)
 
-	// Subscribe to the block topic on both nodes
+	// Subscribe to the header topic on both nodes
 	slice := types.SliceID{
 		Region: 0,
 		Zone:   0,
 	}
-	block := types.Block{}
-	err = gm1.Subscribe(slice, block)
-	assert.NoError(t, err)
-	err = gm2.Subscribe(slice, block)
-	assert.NoError(t, err)
+	header := &types.Header{}
+	err = gm1.Subscribe(slice, header)
+	require.NoError(t, err)
+	err = gm2.Subscribe(slice, header)
+	require.NoError(t, err)
 	time.Sleep(time.Second) // Allow time for subscription to be established
 
 	// define a callback function to handle received data via gossipsub
@@ -58,25 +58,24 @@ func TestPublishSubscribeBlock(t *testing.T) {
 
 	// Start the gossipsub manager on second node
 	gm2.Start(cb)
+	// Create a mock header
+	mockHeader := &types.Header{}
+	mockHeader.SetGasLimit(1000)
+	mockHeader.SetGasUsed(100)
 
-	// Create a mock block to publish
-	mockHash := types.Hash{0x7e, 0x1c, 0x7c, 0x7e, 0x1c, 0x7c, 0x7e, 0x1c, 0x7c, 0x7e, 0x1c, 0x7c, 0x7e, 0x1c, 0x7c, 0x7e, 0x1c, 0x7c, 0x7e, 0x1c, 0x7c, 0x7e, 0x1c, 0x7c, 0x7e, 0x1c, 0x7c, 0x7e, 0x1c, 0x7c}
-	mockBlock := types.Block{
-		Hash: mockHash,
-	}
-
-	// Publish the block on the first node
-	err = gm1.Broadcast(slice, mockBlock)
-	assert.NoError(t, err)
+	// Publish the header on the first node
+	err = gm1.Broadcast(slice, mockHeader)
+	require.NoError(t, err)
 
 	// Wait for the message to be received on the second node
 	select {
 	case msg := <-dataChan:
-		// Check if the received message is a block
-		receivedBlock, ok := msg.(types.Block)
+		// Check if the received message is a header
+		receivedHeader, ok := msg.(types.Header)
 		assert.True(t, ok)
-		// Check if the received block is equal to the mock block
-		assert.Equal(t, mockBlock, receivedBlock)
+		// Check if the received header is equal to the mock header
+		assert.Equal(t, mockHeader.GasLimit(), receivedHeader.GasLimit())
+		assert.Equal(t, mockHeader.GasUsed(), receivedHeader.GasUsed())
 
 	case <-time.After(5 * time.Second):
 		t.Fatal("timeout waiting for message")
