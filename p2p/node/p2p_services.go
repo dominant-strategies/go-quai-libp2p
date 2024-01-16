@@ -24,10 +24,7 @@ func (p *P2PNode) requestBlockFromPeer(hash common.Hash, location common.Locatio
 	defer stream.Close()
 
 	// create a block request protobuf message
-	blockReq := pb.CreateProtoBlockRequest(hash, location)
-
-	// Marshal the block request into a byte array
-	blockReqBytes, err := pb.MarshalProtoMessage(blockReq)
+	blockReq, err := pb.EncodeQuaiRequest(pb.QuaiRequestMessage_REQUEST_BLOCK, &slice, &hash)
 	if err != nil {
 		return nil, err
 	}
@@ -44,21 +41,23 @@ func (p *P2PNode) requestBlockFromPeer(hash common.Hash, location common.Locatio
 		return nil, err
 	}
 
-	// Unmarshal the response into a block
-	found, pbBlock, err := pb.UnmarshalProtoBlockResponse(blockResponse)
+	// Decode the response
+	action, data, err := pb.DecodeQuaiResponse(blockResponse)
 	if err != nil {
 		return nil, err
 	}
 
-	// If the block was found, return it
-	if found {
-		var block *types.Block
-		block.FromProto(pbBlock)
-		return block, nil
+	if action != pb.QuaiResponseMessage_RESPONSE_BLOCK {
+		return nil, errors.New("invalid response type")
 	}
 
-	// If the response does not contain a block, return an error
-	return nil, errors.New("block not found")
+	block, ok := data.(*types.Block)
+	if !ok {
+		return nil, errors.New("invalid block type")
+	}
+
+	return block, nil
+
 }
 
 // Creates a Cid from a location to be used as DHT key
