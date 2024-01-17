@@ -125,13 +125,13 @@ func (p *P2PNode) RequestBlock(hash common.Hash, location common.Location) chan 
 		// 2. If not, query the topic peers for the block
 		peers, err := p.pubsub.PeersForTopic(location, types.Block{})
 		if err != nil {
-			log.Errorf("Error requesting block: ", err)
+			log.Errorf("Error requesting block: %s", err)
 			return
 		}
 		for _, peerID := range peers {
 			block, err := p.requestBlockFromPeer(hash, location, peerID)
 			if err == nil {
-				log.Debugf("Received block %s from peer %s", block.Hash, peerID)
+				log.Debugf("Received block %s from peer %s", block.Hash(), peerID)
 				// add the block to the cache
 				p.blockCache.Add(hash, block)
 				// send the block to the result channel
@@ -140,33 +140,33 @@ func (p *P2PNode) RequestBlock(hash common.Hash, location common.Location) chan 
 			}
 		}
 
-		// 3. If block is not found, query the DHT for peers in the slice
+		// 3. If block is not found, query the DHT for peers in the location
 		// TODO: evaluate making this configurable
 		const (
 			maxDHTQueryRetries    = 3  // Maximum number of retries for DHT queries
 			peersPerDHTQuery      = 10 // Number of peers to query per DHT attempt
 			dhtQueryRetryInterval = 5  // Time to wait between DHT query retries
 		)
-		// create a Cid from the slice location
-		shardCid := locationToCid(location)
+		// create a Cid from the location
+		cid := locationToCid(location)
 		for retries := 0; retries < maxDHTQueryRetries; retries++ {
-			log.Debugf("Querying DHT for slice Cid %s (retry %d)", shardCid, retries)
-			// query the DHT for peers in the slice
-			peerChan := p.dht.FindProvidersAsync(p.ctx, shardCid, peersPerDHTQuery)
+			log.Debugf("Querying DHT for location Cid %s (retry %d)", cid, retries)
+			// query the DHT for peers in the location
+			peerChan := p.dht.FindProvidersAsync(p.ctx, cid, peersPerDHTQuery)
 			for peerInfo := range peerChan {
 				block, err := p.requestBlockFromPeer(hash, location, peerInfo.ID)
 				if err == nil {
-					log.Debugf("Received block %s from peer %s", block.Hash, peerInfo.ID)
+					log.Debugf("Received block %s from peer %s", block.Hash(), peerInfo.ID)
 					p.blockCache.Add(hash, block)
 					resultChan <- block
 					return
 				}
 			}
 			// if the block is not found, wait for a bit and try again
-			log.Debugf("Block %s not found in slice %s. Retrying...", hash, location)
+			log.Debugf("Block %s not found in location %s. Retrying...", hash, location)
 			time.Sleep(dhtQueryRetryInterval * time.Second)
 		}
-		log.Debugf("Block %s not found in slice %s", hash, location)
+		log.Debugf("Block %s not found in location %s", hash, location)
 	}()
 	return resultChan
 }
@@ -210,7 +210,7 @@ func (p *P2PNode) GetBlock(hash common.Hash, location common.Location) *types.Bl
 }
 
 // Search for a header in the node's cache, or query the consensus backend if it's not found in cache.
-func (p *P2PNode) GetHeader(hash common.Hash, slice types.SliceID) *types.Header {
+func (p *P2PNode) GetHeader(hash common.Hash, location common.Location) *types.Header {
 	panic("TODO: implement")
 }
 

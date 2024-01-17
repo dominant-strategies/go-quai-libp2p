@@ -24,7 +24,7 @@ func (p *P2PNode) requestBlockFromPeer(hash common.Hash, location common.Locatio
 	defer stream.Close()
 
 	// create a block request protobuf message
-	blockReq, err := pb.EncodeQuaiRequest(pb.QuaiRequestMessage_REQUEST_BLOCK, &slice, &hash)
+	blockReq, err := pb.EncodeQuaiRequest(pb.QuaiRequestMessage_REQUEST_BLOCK, &location, &hash)
 	if err != nil {
 		return nil, err
 	}

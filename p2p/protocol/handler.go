@@ -48,7 +48,7 @@ func QuaiProtocolHandler(stream network.Stream, node QuaiP2PNode) {
 			log.Debugf("Received block request for location %s and hash %s", loc, hash)
 			handleBlockRequest(loc, hash, stream, node)
 		case pb.QuaiRequestMessage_REQUEST_HEADER:
-			log.Debugf("Received header request for locatin %s and hash %s", loc, hash)
+			log.Debugf("Received header request for location %s and hash %s", loc, hash)
 			handleHeaderRequest(loc, hash, stream, node)
 		case pb.QuaiRequestMessage_REQUEST_TRANSACTION:
 			handleTransactionRequest(loc, hash, stream, node)
@@ -93,7 +93,7 @@ func handleHeaderRequest(loc *common.Location, hash *common.Hash, stream network
 		log.Warnf("header not found")
 		return
 	}
-	log.Tracef("header found: %+v", header)
+	log.Debugf("header found: %+v", header)
 	// create a Quai Message Response with the header
 	action := pb.QuaiResponseMessage_RESPONSE_HEADER
 	data, err := pb.EncodeQuaiResponse(action, header)

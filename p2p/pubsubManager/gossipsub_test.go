@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dominant-strategies/go-quai/common"
 	"github.com/dominant-strategies/go-quai/core/types"
 	mocknet "github.com/libp2p/go-libp2p/p2p/net/mock"
 	"github.com/stretchr/testify/assert"
@@ -39,14 +40,11 @@ func TestSubscribeAndBroadcast(t *testing.T) {
 	require.NoError(t, err)
 
 	// Subscribe to the header topic on both nodes
-	slice := types.SliceID{
-		Region: 0,
-		Zone:   0,
-	}
+	loc := common.Location([]byte("test"))
 	header := &types.Header{}
-	err = gm1.Subscribe(slice, header)
+	err = gm1.Subscribe(loc, header)
 	require.NoError(t, err)
-	err = gm2.Subscribe(slice, header)
+	err = gm2.Subscribe(loc, header)
 	require.NoError(t, err)
 	time.Sleep(time.Second) // Allow time for subscription to be established
 
@@ -64,7 +62,7 @@ func TestSubscribeAndBroadcast(t *testing.T) {
 	mockHeader.SetGasUsed(100)
 
 	// Publish the header on the first node
-	err = gm1.Broadcast(slice, mockHeader)
+	err = gm1.Broadcast(loc, mockHeader)
 	require.NoError(t, err)
 
 	// Wait for the message to be received on the second node
