@@ -1,5 +1,6 @@
 syntax = "proto3";
 
+import "p2p/pb/header.proto";
 
 package quaiprotocol;
 option go_package = "github.com/dominant-strategies/go-quai/p2p/pb";
@@ -48,15 +49,6 @@ message Block {
 // TODO: add receipts
 // TODO: add hasher
     uint32 nodeCtx = 7;
-    // Additional fields...
-}
-
-// Header structure
-message Header {
-    Hash hash = 1;
-    Hash parentHash = 2;
-    uint64 gasLimit = 3;
-    uint64 gasUsed = 4;
     // Additional fields...
 }
 
