@@ -1,6 +1,7 @@
 package core
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -1369,11 +1370,35 @@ func (hc *HeaderChain) WriteUtxoViewpoint(view *types.UtxoViewpoint) error {
 		// Remove the utxo entry if it is spent.
 		if entry.IsSpent() {
 			rawdb.DeleteUtxo(hc.bc.db, outpoint.Hash, outpoint.Index)
+
+			entryAddress := common.BytesToAddress(entry.Address, hc.NodeLocation())
+			addressUtxos := rawdb.ReadAddressUtxos(hc.bc.db, entryAddress)
+
+			// Iterate over addressUtxos and find the outpointHash and outpointIndex entry, then remove it.
+			for i, utxo := range addressUtxos {
+				// TODO: Need to determine if this is adequate matching to remove upon spending
+				// Entry will show as spent so need to determine how to check packed flags equivalence?
+				if utxo.Denomination == entry.Denomination &&
+					bytes.Equal(utxo.Address, entry.Address) && // Use bytes.Equal for byte slice comparison
+					utxo.BlockHeight == entry.BlockHeight {
+					// Remove the utxo from the slice by filtering it out.
+					addressUtxos = append(addressUtxos[:i], addressUtxos[i+1:]...)
+					break
+				}
+			}
+
+			rawdb.WriteAddressUtxos(hc.bc.db, entryAddress, addressUtxos)
+
 			continue
 		}
 
 		fmt.Println("write utxo", outpoint.Hash.Hex(), outpoint.Index)
 		rawdb.WriteUtxo(hc.bc.db, outpoint.Hash, outpoint.Index, entry)
+		entryAddress := common.BytesToAddress(entry.Address, hc.NodeLocation())
+		addressUtxos := rawdb.ReadAddressUtxos(hc.bc.db, entryAddress)
+		addressUtxos = append(addressUtxos, entry)
+		fmt.Println("utxos for address", len(addressUtxos))
+		rawdb.WriteAddressUtxos(hc.bc.db, entryAddress, addressUtxos)
 	}
 
 	return nil
