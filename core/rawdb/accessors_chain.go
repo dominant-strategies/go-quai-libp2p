@@ -1434,7 +1434,7 @@ func ReadUtxo(db ethdb.Reader, hash common.Hash, index uint32) *types.UtxoEntry 
 	}
 	utxo := new(types.UtxoEntry)
 	if err := rlp.Decode(bytes.NewReader(data), utxo); err != nil {
-		return nil
+		log.Global.WithField("err", err).Fatal("Failed to rlp decode utxo")
 	}
 	return utxo
 }
