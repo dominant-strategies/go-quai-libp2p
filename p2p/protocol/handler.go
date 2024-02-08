@@ -97,10 +97,8 @@ func QuaiProtocolHandler(stream network.Stream, node QuaiP2PNode) {
 			log.Global.Errorf("unsupported request data type: %T", decodedType)
 			// TODO: handle error
 			continue
-
 		}
 	}
-	log.Global.Tracef("Exiting Quai Protocol Handler")
 }
 
 // Seeks the block in the cache or database and sends it to the peer in a pb.QuaiResponseMessage
