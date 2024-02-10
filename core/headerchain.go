@@ -505,6 +505,11 @@ func (hc *HeaderChain) setCurrentUTXOSet(head *types.Header) error {
 				return fmt.Errorf("coinbase output value of %v is higher than expected value of %v", totalCoinbaseOut, maxCoinbaseOut)
 			}
 		}
+		// Add genesis utxos to the set
+		if prevHeader.Hash() == hc.config.GenesisHash {
+			AddGenesisUtxos(utxoView, hc.NodeLocation(), hc.logger)
+		}
+
 		// Update the best hash for view to include this block since all of its
 		// transactions have been connected.
 		utxoView.SetBestHash(block.Hash())
@@ -606,6 +611,7 @@ func (hc *HeaderChain) setCurrentUTXOSet(head *types.Header) error {
 				return fmt.Errorf("coinbase output value of %v is higher than expected value of %v", totalCoinbaseOut, maxCoinbaseOut)
 			}
 		}
+
 		// Update the best hash for view to include this block since all of its
 		// transactions have been connected.
 		utxoView.SetBestHash(block.Hash())
@@ -1240,7 +1246,7 @@ func (hc *HeaderChain) FetchUtxosMain(view *types.UtxoViewpoint, outpoints []typ
 			return fmt.Errorf("utxo not found")
 		}
 
-		view.AddEntry(outpoints, i, entry)
+		view.AddEntry(outpoints[i], entry)
 	}
 
 	return nil

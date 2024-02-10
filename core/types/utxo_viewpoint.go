@@ -141,8 +141,8 @@ func (view *UtxoViewpoint) LookupEntry(outpoint OutPoint) *UtxoEntry {
 	return view.Entries[outpoint]
 }
 
-func (view *UtxoViewpoint) AddEntry(outpoints []OutPoint, i int, entry *UtxoEntry) {
-	view.Entries[outpoints[i]] = entry
+func (view *UtxoViewpoint) AddEntry(outpoint OutPoint, entry *UtxoEntry) {
+	view.Entries[outpoint] = entry
 }
 
 // FetchPrevOutput fetches the previous output referenced by the passed
