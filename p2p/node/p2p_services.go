@@ -12,7 +12,6 @@ import (
 	"github.com/dominant-strategies/go-quai/core/types"
 	"github.com/dominant-strategies/go-quai/log"
 	"github.com/dominant-strategies/go-quai/p2p/pb"
-	"github.com/dominant-strategies/go-quai/p2p/protocol"
 	"github.com/dominant-strategies/go-quai/trie"
 )
 
@@ -26,10 +25,12 @@ func (p *P2PNode) requestFromPeer(peerID peer.ID, location common.Location, data
 	}).Trace("Requesting the data from peer")
 	stream, err := p.NewStream(peerID)
 	if err != nil {
-		// TODO: should we report this peer for failure to participate?
+		log.Global.WithFields(log.Fields{
+			"peerId": peerID,
+			"error":  err,
+		}).Error("Failed to open stream to peer")
 		return nil, err
 	}
-	defer stream.Close()
 
 	// Get a new request ID
 	id := p.requestManager.CreateRequest()

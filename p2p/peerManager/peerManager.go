@@ -6,17 +6,23 @@ import (
 	"strings"
 	"sync"
 
+	lru "github.com/hashicorp/golang-lru"
 	"github.com/pkg/errors"
 
+	"github.com/dominant-strategies/go-quai/log"
 	"github.com/dominant-strategies/go-quai/p2p"
+	quaiprotocol "github.com/dominant-strategies/go-quai/p2p/protocol"
+
 	"github.com/ipfs/go-datastore"
 	"github.com/ipfs/go-datastore/query"
-	basicConnGater "github.com/libp2p/go-libp2p/p2p/net/conngater"
-	basicConnMgr "github.com/libp2p/go-libp2p/p2p/net/connmgr"
 
 	"github.com/dominant-strategies/go-quai/p2p/peerManager/peerdb"
 	"github.com/libp2p/go-libp2p/core/connmgr"
+	"github.com/libp2p/go-libp2p/core/host"
+	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
+	basicConnGater "github.com/libp2p/go-libp2p/p2p/net/conngater"
+	basicConnMgr "github.com/libp2p/go-libp2p/p2p/net/connmgr"
 )
 
 const (
@@ -26,11 +32,18 @@ const (
 
 	// The number of peers to return when querying for peers
 	c_peerCount = 3
+	// The amount of redundancy for open streams
+	// c_peerCount * c_streamReplicationFactor = total number of open streams
+	c_streamReplicationFactor = 3
 
 	// Dir names for the peerDBs
 	c_bestDBName       = "bestPeersDB"
 	c_responsiveDBName = "responsivePeersDB"
 	c_lastResortDBName = "lastResortPeersDB"
+)
+
+var (
+	errStreamNotFound = errors.New("stream not found")
 )
 
 // PeerManager is an interface that extends libp2p Connection Manager and Gater
@@ -52,6 +65,8 @@ type PeerManager interface {
 	AddPeer(p2p.PeerID) error
 	// Removes a peer from all the quality buckets
 	RemovePeer(p2p.PeerID) error
+	// Returns an existing stream with that peer or opens a new one
+	GetStream(p peer.ID) (network.Stream, error)
 
 	// Returns c_recipientCount of the highest quality peers: lively & resposnive
 	GetBestPeersWithFallback() []p2p.PeerID
@@ -84,6 +99,9 @@ type PeerManager interface {
 type BasicPeerManager struct {
 	*basicConnGater.BasicConnectionGater
 	*basicConnMgr.BasicConnMgr
+
+	hostBackend host.Host
+	streamCache *lru.Cache
 
 	selfID p2p.PeerID
 
@@ -120,13 +138,22 @@ func NewManager(ctx context.Context, low int, high int, datastore datastore.Data
 		return nil, err
 	}
 
+	lruCache, err := lru.NewWithEvict(
+		c_peerCount*c_streamReplicationFactor,
+		severStream,
+	)
+	if err != nil {
+		return nil, err
+	}
+
 	return &BasicPeerManager{
+		ctx:                  ctx,
+		streamCache:          lruCache,
 		BasicConnMgr:         mgr,
 		BasicConnectionGater: gater,
 		bestPeersDB:          bestPeersDB,
 		responsivePeersDB:    responsivePeersDB,
 		lastResortPeers:      lastResortPeers,
-		ctx:                  ctx,
 	}, nil
 }
 
@@ -134,8 +161,16 @@ func (pm *BasicPeerManager) AddPeer(peerID p2p.PeerID) error {
 	return pm.recategorizePeer(peerID)
 }
 
-// Removes peer from the bucket it is in. Does not return an error if the peer is not found
 func (pm *BasicPeerManager) RemovePeer(peerID p2p.PeerID) error {
+	err := pm.removePeerFromDBs(peerID)
+	if err != nil {
+		return err
+	}
+	return pm.prunePeerConnection(peerID)
+}
+
+// Removes peer from the bucket it is in. Does not return an error if the peer is not found
+func (pm *BasicPeerManager) removePeerFromDBs(peerID p2p.PeerID) error {
 	key := datastore.NewKey(peerID.String())
 
 	dbs := []*peerdb.PeerDB{pm.bestPeersDB, pm.responsivePeersDB, pm.lastResortPeers}
@@ -145,8 +180,54 @@ func (pm *BasicPeerManager) RemovePeer(peerID p2p.PeerID) error {
 			return db.Delete(pm.ctx, key)
 		}
 	}
-
 	return nil
+}
+
+func (pm *BasicPeerManager) prunePeerConnection(peerID p2p.PeerID) error {
+	log.Global.Warn("Trying to prune connection")
+	stream, ok := pm.streamCache.Get(peerID)
+	if ok {
+		log.Global.Warn("Pruned connection")
+		severStream(peerID, stream)
+		return nil
+	}
+	return errStreamNotFound
+}
+
+func severStream(key interface{}, value interface{}) {
+	stream := value.(streamAndError).stream
+	stream.Close()
+}
+
+func (pm *BasicPeerManager) SetP2PBackend(host host.Host) {
+	pm.hostBackend = host
+}
+
+type streamAndError struct {
+	stream network.Stream
+	err    error
+}
+
+func (pm *BasicPeerManager) GetStream(peerID p2p.PeerID) (network.Stream, error) {
+	log.Global.Warn("Getting new stream")
+	streamError, ok, _ := pm.streamCache.PeekOrAdd(peerID, func() streamAndError {
+		stream, err := pm.hostBackend.NewStream(pm.ctx, peerID, quaiprotocol.ProtocolVersion)
+		if err != nil {
+			return streamAndError{nil, err}
+		}
+		return streamAndError{stream, nil}
+	}())
+
+	if !ok {
+		// Here streamError will be nil because it wasn't found in the cache
+		// A new stream was added to the cache, but we have to go and retrieve it
+		streamError, _ = pm.streamCache.Get(peerID)
+		log.Global.Warn("Had to create new stream")
+	} else {
+		log.Global.Warn("Stream was found in cache")
+	}
+
+	return streamError.(streamAndError).stream, streamError.(streamAndError).err
 }
 
 func (pm *BasicPeerManager) SetSelfID(selfID p2p.PeerID) {
@@ -170,6 +251,7 @@ func (pm *BasicPeerManager) getPeersHelper(peerDB *peerdb.PeerDB, numPeers int) 
 		}
 		peerSubset = append(peerSubset, peerID)
 	}
+	log.Global.Print("Peer Subset: ", peerSubset)
 
 	return peerSubset
 }
@@ -261,13 +343,12 @@ func (pm *BasicPeerManager) recategorizePeer(peer p2p.PeerID) error {
 	responsiveness := pm.calculatePeerResponsiveness(peer)
 
 	// remove peer from DB first
-	err := pm.RemovePeer(peer)
+	err := pm.removePeerFromDBs(peer)
 	if err != nil {
 		return err
 	}
 
 	key := datastore.NewKey(peer.String())
-	// TODO: construct peerDB.PeerInfo and marshal it to bytes
 	peerInfo := []byte{}
 
 	if liveness >= c_qualityThreshold && responsiveness >= c_qualityThreshold {

@@ -158,6 +158,9 @@ func NewNode(ctx context.Context) (*P2PNode, error) {
 		return nil, err
 	}
 
+	// Set the peer manager's backend to the host
+	peerMgr.SetP2PBackend(host)
+
 	idOpts := []identify.Option{
 		// TODO: Add version number + commit hash
 		identify.UserAgent("go-quai"),
