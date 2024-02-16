@@ -275,7 +275,7 @@ func testChainID(t *testing.T, client *rpc.Client) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if id == nil || id.Cmp(params.AllProgpowProtocolChanges.ChainID) != 0 {
+	if id == nil || id.Cmp(big.NewInt(1)) != 0 {
 		t.Fatalf("ChainID returned wrong number: %+v", id)
 	}
 }
