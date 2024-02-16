@@ -4,4 +4,6 @@ nodelogs/
 */config.toml
 */private.key
 .vscode/
+testlogs/
 .idea*
+*.cov
