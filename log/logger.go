@@ -45,6 +45,7 @@ func SetGlobalLogger(logFilename string, logLevel string) {
 		level = defaultLogLevel
 	}
 	Global.SetLevel(level)
+	Global.SetReportCaller(true)
 
 	if logFilename == "" {
 		Global.WithFields(Fields{
