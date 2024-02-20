@@ -32,12 +32,13 @@ message QuaiRequestMessage {
 // QuaiResponseMessage is the main 'envelope' for QuaiProtocol response messages
 message QuaiResponseMessage {
     uint32 id = 1;
+    common.ProtoLocation location = 2;
     oneof response {
-        block.ProtoBlock block = 2;
-        block.ProtoHeader header = 3;
-        block.ProtoTransaction transaction = 4;
-        common.ProtoHash blockHash = 5;
-        trie.ProtoTrieNode trieNode = 6;
+        block.ProtoBlock block = 3;
+        block.ProtoHeader header = 4;
+        block.ProtoTransaction transactiol = 5;
+        common.ProtoHash blockHash = 6;
+        trie.ProtoTrieNode trieNode = 7;
     }
 }
 
