@@ -36,9 +36,8 @@ message QuaiResponseMessage {
     oneof response {
         block.ProtoBlock block = 3;
         block.ProtoHeader header = 4;
-        block.ProtoTransaction transactiol = 5;
+        block.ProtoTransaction transaction = 5;
         common.ProtoHash blockHash = 6;
         trie.ProtoTrieNode trieNode = 7;
     }
 }
-

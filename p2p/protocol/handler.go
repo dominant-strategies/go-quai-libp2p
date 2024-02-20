@@ -113,7 +113,7 @@ func handleBlockRequest(id uint32, loc common.Location, hash common.Hash, stream
 	}
 	log.Global.Debugf("block found %s", block.Hash())
 	// create a Quai Message Response with the block
-	data, err := pb.EncodeQuaiResponse(id, block)
+	data, err := pb.EncodeQuaiResponse(id, loc, block)
 	if err != nil {
 		return err
 	}
@@ -135,7 +135,7 @@ func handleHeaderRequest(id uint32, loc common.Location, hash common.Hash, strea
 	}
 	log.Global.Debugf("header found %s", header.Hash())
 	// create a Quai Message Response with the header
-	data, err := pb.EncodeQuaiResponse(id, header)
+	data, err := pb.EncodeQuaiResponse(id, loc, header)
 	if err != nil {
 		return err
 	}
@@ -161,7 +161,7 @@ func handleBlockNumberRequest(id uint32, loc common.Location, number *big.Int, s
 	}
 	log.Global.Tracef("block found %s", blockHash)
 	// create a Quai Message Response with the block
-	data, err := pb.EncodeQuaiResponse(id, blockHash)
+	data, err := pb.EncodeQuaiResponse(id, loc, blockHash)
 	if err != nil {
 		return err
 	}
@@ -181,7 +181,7 @@ func handleTrieNodeRequest(id uint32, loc common.Location, hash common.Hash, str
 		return nil
 	}
 	log.Global.Tracef("trie node found")
-	data, err := pb.EncodeQuaiResponse(id, trieNode)
+	data, err := pb.EncodeQuaiResponse(id, loc, trieNode)
 	if err != nil {
 		return err
 	}

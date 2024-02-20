@@ -99,10 +99,11 @@ func DecodeQuaiRequest(data []byte) (uint32, interface{}, common.Location, inter
 
 // EncodeResponse creates a marshaled protobuf message for a Quai Response.
 // Returns the serialized protobuf message.
-func EncodeQuaiResponse(id uint32, data interface{}) ([]byte, error) {
+func EncodeQuaiResponse(id uint32, location common.Location, data interface{}) ([]byte, error) {
 
 	respMsg := QuaiResponseMessage{
-		Id: id,
+		Id:       id,
+		Location: location.ProtoEncode(),
 	}
 
 	switch data := data.(type) {
