@@ -98,7 +98,7 @@ func (p *P2PNode) readLoop(stream network.Stream, location common.Location) {
 			return
 		}
 
-		recvdID, recvdType, err := pb.DecodeQuaiResponse(message, location)
+		recvdID, recvdType, err := pb.DecodeQuaiResponse(message)
 		if err != nil {
 			log.Global.WithField(
 				"err", err,

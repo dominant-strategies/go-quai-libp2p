@@ -143,7 +143,7 @@ func EncodeQuaiResponse(id uint32, location common.Location, data interface{}) (
 //  1. The request ID
 //  2. The decoded type (i.e. *types.Header, *types.Block, etc)
 //  3. An error
-func DecodeQuaiResponse(data []byte, sourceLocation common.Location) (uint32, interface{}, error) {
+func DecodeQuaiResponse(data []byte) (uint32, interface{}, error) {
 	var respMsg QuaiResponseMessage
 	err := proto.Unmarshal(data, &respMsg)
 	if err != nil {
@@ -151,6 +151,8 @@ func DecodeQuaiResponse(data []byte, sourceLocation common.Location) (uint32, in
 	}
 
 	id := respMsg.Id
+	sourceLocation := &common.Location{}
+	sourceLocation.ProtoDecode(respMsg.Location)
 
 	switch respMsg.Response.(type) {
 	case *QuaiResponseMessage_Block:
@@ -175,7 +177,7 @@ func DecodeQuaiResponse(data []byte, sourceLocation common.Location) (uint32, in
 	case *QuaiResponseMessage_Transaction:
 		protoTransaction := respMsg.GetTransaction()
 		transaction := &types.Transaction{}
-		err := transaction.ProtoDecode(protoTransaction, sourceLocation)
+		err := transaction.ProtoDecode(protoTransaction, *sourceLocation)
 		if err != nil {
 			return id, nil, err
 		}
