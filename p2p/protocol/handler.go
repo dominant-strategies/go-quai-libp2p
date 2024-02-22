@@ -27,14 +27,11 @@ func QuaiProtocolHandler(stream network.Stream, node QuaiP2PNode) {
 		return
 	}
 
-	// go node.ReadResponses(stream)
-
 	// Enter the read loop for the stream and handle messages
 	for {
 		data, err := common.ReadMessageFromStream(stream)
 		if err != nil {
 			if errors.Is(err, network.ErrReset) || errors.Is(err, io.EOF) {
-				stream.Close()
 				return
 			}
 
@@ -60,7 +57,6 @@ func QuaiProtocolHandler(stream network.Stream, node QuaiP2PNode) {
 			log.Global.Errorf("unsupported quai message type: %T", quaiMsg)
 		}
 	}
-	log.Global.Tracef("Exiting Quai Protocol Handler")
 }
 
 func handleRequest(quaiMsg *pb.QuaiRequestMessage, stream network.Stream, node QuaiP2PNode) {

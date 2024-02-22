@@ -120,24 +120,28 @@ func EncodeQuaiResponse(id uint32, location common.Location, data interface{}) (
 			return nil, err
 		}
 		respMsg.Response = &QuaiResponseMessage_Block{Block: protoBlock}
+	
 	case *types.Header:
 		protoHeader, err := data.ProtoEncode()
 		if err != nil {
 			return nil, err
 		}
 		respMsg.Response = &QuaiResponseMessage_Header{Header: protoHeader}
+	
 	case *types.Transaction:
 		protoTransaction, err := data.ProtoEncode()
 		if err != nil {
 			return nil, err
 		}
 		respMsg.Response = &QuaiResponseMessage_Transaction{Transaction: protoTransaction}
+	
 	case *trie.TrieNodeResponse:
 		protoTrieNode := &trie.ProtoTrieNode{ProtoNodeData: data.NodeData}
 		respMsg.Response = &QuaiResponseMessage_TrieNode{TrieNode: protoTrieNode}
-
+	
 	case *common.Hash:
 		respMsg.Response = &QuaiResponseMessage_BlockHash{BlockHash: data.ProtoEncode()}
+
 	default:
 		return nil, errors.Errorf("unsupported response data type: %T", data)
 	}
