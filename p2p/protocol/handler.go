@@ -4,7 +4,6 @@ import (
 	"errors"
 	"io"
 	"math/big"
-	"os"
 
 	"github.com/libp2p/go-libp2p/core/network"
 
@@ -34,7 +33,8 @@ func QuaiProtocolHandler(stream network.Stream, node QuaiP2PNode) {
 	for {
 		data, err := common.ReadMessageFromStream(stream)
 		if err != nil {
-			if errors.Is(err, network.ErrReset) || errors.Is(err, io.EOF) || errors.Is(err, os.ErrDeadlineExceeded) {
+			if errors.Is(err, network.ErrReset) || errors.Is(err, io.EOF) {
+				stream.Close()
 				return
 			}
 
