@@ -140,7 +140,7 @@ func handleBlockRequest(id uint32, loc common.Location, hash common.Hash, stream
 	if err != nil {
 		return err
 	}
-	log.Global.Debugf("Sent block %s to peer %s", block.Hash(), stream.Conn().RemotePeer())
+	log.Global.Errorf("Sent block %s to peer %s", block.Hash(), stream.Conn().RemotePeer())
 	return nil
 }
 

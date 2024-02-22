@@ -209,7 +209,6 @@ type streamAndError struct {
 }
 
 func (pm *BasicPeerManager) GetStream(peerID p2p.PeerID) (network.Stream, error) {
-	log.Global.Warn("Getting new stream")
 	streamError, ok, _ := pm.streamCache.PeekOrAdd(peerID, func() streamAndError {
 		stream, err := pm.hostBackend.NewStream(pm.ctx, peerID, quaiprotocol.ProtocolVersion)
 		if err != nil {
