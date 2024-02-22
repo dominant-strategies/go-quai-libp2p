@@ -43,8 +43,6 @@ message QuaiResponseMessage {
 }
 
 message QuaiMessage {
-    uint32 id = 1;
-    common.ProtoLocation location = 2;
     oneof payload {
         QuaiRequestMessage request = 3;
         QuaiResponseMessage response = 4;

@@ -52,7 +52,10 @@ func EncodeQuaiRequest(id uint32, location common.Location, data interface{}, da
 		return nil, errors.Errorf("unsupported request data type: %T", datatype)
 	}
 
-	return proto.Marshal(&reqMsg)
+	quaiMsg := QuaiMessage{
+		Payload: &QuaiMessage_Request{Request: &reqMsg},
+	}
+	return proto.Marshal(&quaiMsg)
 }
 
 // DecodeRequestMessage unmarshals a protobuf message into a Quai Request.
@@ -139,7 +142,11 @@ func EncodeQuaiResponse(id uint32, location common.Location, data interface{}) (
 		return nil, errors.Errorf("unsupported response data type: %T", data)
 	}
 
-	return proto.Marshal(&respMsg)
+	quaiMsg := QuaiMessage{
+		Payload: &QuaiMessage_Response{Response: &respMsg},
+	}
+
+	return proto.Marshal(&quaiMsg)
 }
 
 // Unmarshals a serialized protobuf message into a Quai Response message.
