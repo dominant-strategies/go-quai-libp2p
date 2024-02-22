@@ -95,8 +95,15 @@ func (p *P2PNode) ReadResponses(stream network.Stream) {
 		if err != nil {
 			return
 		}
+		quaiMsg, err := pb.DecodeQuaiMessage(message)
+		if err != nil {
+			log.Global.WithField(
+				"err", err,
+			).Errorf("error decoding quai response: %s", err)
+			return
+		}
 
-		recvdID, recvdType, err := pb.DecodeQuaiResponse(message)
+		recvdID, recvdType, err := pb.DecodeQuaiResponse(quaiMsg.GetResponse())
 		if err != nil {
 			log.Global.WithField(
 				"err", err,

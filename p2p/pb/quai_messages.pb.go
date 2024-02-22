@@ -440,6 +440,103 @@ func (*QuaiResponseMessage_BlockHash) isQuaiResponseMessage_Response() {}
 
 func (*QuaiResponseMessage_TrieNode) isQuaiResponseMessage_Response() {}
 
+type QuaiMessage struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Id       uint32                `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	Location *common.ProtoLocation `protobuf:"bytes,2,opt,name=location,proto3" json:"location,omitempty"`
+	// Types that are assignable to Payload:
+	//
+	//	*QuaiMessage_Request
+	//	*QuaiMessage_Response
+	Payload isQuaiMessage_Payload `protobuf_oneof:"payload"`
+}
+
+func (x *QuaiMessage) Reset() {
+	*x = QuaiMessage{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_p2p_pb_quai_messages_proto_msgTypes[4]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *QuaiMessage) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*QuaiMessage) ProtoMessage() {}
+
+func (x *QuaiMessage) ProtoReflect() protoreflect.Message {
+	mi := &file_p2p_pb_quai_messages_proto_msgTypes[4]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use QuaiMessage.ProtoReflect.Descriptor instead.
+func (*QuaiMessage) Descriptor() ([]byte, []int) {
+	return file_p2p_pb_quai_messages_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *QuaiMessage) GetId() uint32 {
+	if x != nil {
+		return x.Id
+	}
+	return 0
+}
+
+func (x *QuaiMessage) GetLocation() *common.ProtoLocation {
+	if x != nil {
+		return x.Location
+	}
+	return nil
+}
+
+func (m *QuaiMessage) GetPayload() isQuaiMessage_Payload {
+	if m != nil {
+		return m.Payload
+	}
+	return nil
+}
+
+func (x *QuaiMessage) GetRequest() *QuaiRequestMessage {
+	if x, ok := x.GetPayload().(*QuaiMessage_Request); ok {
+		return x.Request
+	}
+	return nil
+}
+
+func (x *QuaiMessage) GetResponse() *QuaiResponseMessage {
+	if x, ok := x.GetPayload().(*QuaiMessage_Response); ok {
+		return x.Response
+	}
+	return nil
+}
+
+type isQuaiMessage_Payload interface {
+	isQuaiMessage_Payload()
+}
+
+type QuaiMessage_Request struct {
+	Request *QuaiRequestMessage `protobuf:"bytes,3,opt,name=request,proto3,oneof"`
+}
+
+type QuaiMessage_Response struct {
+	Response *QuaiResponseMessage `protobuf:"bytes,4,opt,name=response,proto3,oneof"`
+}
+
+func (*QuaiMessage_Request) isQuaiMessage_Payload() {}
+
+func (*QuaiMessage_Response) isQuaiMessage_Payload() {}
+
 var File_p2p_pb_quai_messages_proto protoreflect.FileDescriptor
 
 var file_p2p_pb_quai_messages_proto_rawDesc = []byte{
@@ -508,10 +605,24 @@ var file_p2p_pb_quai_messages_proto_rawDesc = []byte{
 	0x64, 0x65, 0x18, 0x07, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x13, 0x2e, 0x74, 0x72, 0x69, 0x65, 0x2e,
 	0x50, 0x72, 0x6f, 0x74, 0x6f, 0x54, 0x72, 0x69, 0x65, 0x4e, 0x6f, 0x64, 0x65, 0x48, 0x00, 0x52,
 	0x08, 0x74, 0x72, 0x69, 0x65, 0x4e, 0x6f, 0x64, 0x65, 0x42, 0x0a, 0x0a, 0x08, 0x72, 0x65, 0x73,
-	0x70, 0x6f, 0x6e, 0x73, 0x65, 0x42, 0x2f, 0x5a, 0x2d, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e,
-	0x63, 0x6f, 0x6d, 0x2f, 0x64, 0x6f, 0x6d, 0x69, 0x6e, 0x61, 0x6e, 0x74, 0x2d, 0x73, 0x74, 0x72,
-	0x61, 0x74, 0x65, 0x67, 0x69, 0x65, 0x73, 0x2f, 0x67, 0x6f, 0x2d, 0x71, 0x75, 0x61, 0x69, 0x2f,
-	0x70, 0x32, 0x70, 0x2f, 0x70, 0x62, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
+	0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0xda, 0x01, 0x0a, 0x0b, 0x51, 0x75, 0x61, 0x69, 0x4d, 0x65,
+	0x73, 0x73, 0x61, 0x67, 0x65, 0x12, 0x0e, 0x0a, 0x02, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28,
+	0x0d, 0x52, 0x02, 0x69, 0x64, 0x12, 0x31, 0x0a, 0x08, 0x6c, 0x6f, 0x63, 0x61, 0x74, 0x69, 0x6f,
+	0x6e, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x15, 0x2e, 0x63, 0x6f, 0x6d, 0x6d, 0x6f, 0x6e,
+	0x2e, 0x50, 0x72, 0x6f, 0x74, 0x6f, 0x4c, 0x6f, 0x63, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x52, 0x08,
+	0x6c, 0x6f, 0x63, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x12, 0x3c, 0x0a, 0x07, 0x72, 0x65, 0x71, 0x75,
+	0x65, 0x73, 0x74, 0x18, 0x03, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x20, 0x2e, 0x71, 0x75, 0x61, 0x69,
+	0x70, 0x72, 0x6f, 0x74, 0x6f, 0x63, 0x6f, 0x6c, 0x2e, 0x51, 0x75, 0x61, 0x69, 0x52, 0x65, 0x71,
+	0x75, 0x65, 0x73, 0x74, 0x4d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x48, 0x00, 0x52, 0x07, 0x72,
+	0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x3f, 0x0a, 0x08, 0x72, 0x65, 0x73, 0x70, 0x6f, 0x6e,
+	0x73, 0x65, 0x18, 0x04, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x21, 0x2e, 0x71, 0x75, 0x61, 0x69, 0x70,
+	0x72, 0x6f, 0x74, 0x6f, 0x63, 0x6f, 0x6c, 0x2e, 0x51, 0x75, 0x61, 0x69, 0x52, 0x65, 0x73, 0x70,
+	0x6f, 0x6e, 0x73, 0x65, 0x4d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x48, 0x00, 0x52, 0x08, 0x72,
+	0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x42, 0x09, 0x0a, 0x07, 0x70, 0x61, 0x79, 0x6c, 0x6f,
+	0x61, 0x64, 0x42, 0x2f, 0x5a, 0x2d, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d,
+	0x2f, 0x64, 0x6f, 0x6d, 0x69, 0x6e, 0x61, 0x6e, 0x74, 0x2d, 0x73, 0x74, 0x72, 0x61, 0x74, 0x65,
+	0x67, 0x69, 0x65, 0x73, 0x2f, 0x67, 0x6f, 0x2d, 0x71, 0x75, 0x61, 0x69, 0x2f, 0x70, 0x32, 0x70,
+	0x2f, 0x70, 0x62, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
 }
 
 var (
@@ -526,40 +637,44 @@ func file_p2p_pb_quai_messages_proto_rawDescGZIP() []byte {
 	return file_p2p_pb_quai_messages_proto_rawDescData
 }
 
-var file_p2p_pb_quai_messages_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_p2p_pb_quai_messages_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_p2p_pb_quai_messages_proto_goTypes = []interface{}{
 	(*GossipBlock)(nil),            // 0: quaiprotocol.GossipBlock
 	(*GossipTransaction)(nil),      // 1: quaiprotocol.GossipTransaction
 	(*QuaiRequestMessage)(nil),     // 2: quaiprotocol.QuaiRequestMessage
 	(*QuaiResponseMessage)(nil),    // 3: quaiprotocol.QuaiResponseMessage
-	(*types.ProtoBlock)(nil),       // 4: block.ProtoBlock
-	(*types.ProtoTransaction)(nil), // 5: block.ProtoTransaction
-	(*common.ProtoLocation)(nil),   // 6: common.ProtoLocation
-	(*common.ProtoHash)(nil),       // 7: common.ProtoHash
-	(*types.ProtoHeader)(nil),      // 8: block.ProtoHeader
-	(*trie.ProtoTrieNode)(nil),     // 9: trie.ProtoTrieNode
+	(*QuaiMessage)(nil),            // 4: quaiprotocol.QuaiMessage
+	(*types.ProtoBlock)(nil),       // 5: block.ProtoBlock
+	(*types.ProtoTransaction)(nil), // 6: block.ProtoTransaction
+	(*common.ProtoLocation)(nil),   // 7: common.ProtoLocation
+	(*common.ProtoHash)(nil),       // 8: common.ProtoHash
+	(*types.ProtoHeader)(nil),      // 9: block.ProtoHeader
+	(*trie.ProtoTrieNode)(nil),     // 10: trie.ProtoTrieNode
 }
 var file_p2p_pb_quai_messages_proto_depIdxs = []int32{
-	4,  // 0: quaiprotocol.GossipBlock.block:type_name -> block.ProtoBlock
-	5,  // 1: quaiprotocol.GossipTransaction.transaction:type_name -> block.ProtoTransaction
-	6,  // 2: quaiprotocol.QuaiRequestMessage.location:type_name -> common.ProtoLocation
-	7,  // 3: quaiprotocol.QuaiRequestMessage.hash:type_name -> common.ProtoHash
-	4,  // 4: quaiprotocol.QuaiRequestMessage.block:type_name -> block.ProtoBlock
-	8,  // 5: quaiprotocol.QuaiRequestMessage.header:type_name -> block.ProtoHeader
-	5,  // 6: quaiprotocol.QuaiRequestMessage.transaction:type_name -> block.ProtoTransaction
-	7,  // 7: quaiprotocol.QuaiRequestMessage.blockHash:type_name -> common.ProtoHash
-	9,  // 8: quaiprotocol.QuaiRequestMessage.trieNode:type_name -> trie.ProtoTrieNode
-	6,  // 9: quaiprotocol.QuaiResponseMessage.location:type_name -> common.ProtoLocation
-	4,  // 10: quaiprotocol.QuaiResponseMessage.block:type_name -> block.ProtoBlock
-	8,  // 11: quaiprotocol.QuaiResponseMessage.header:type_name -> block.ProtoHeader
-	5,  // 12: quaiprotocol.QuaiResponseMessage.transaction:type_name -> block.ProtoTransaction
-	7,  // 13: quaiprotocol.QuaiResponseMessage.blockHash:type_name -> common.ProtoHash
-	9,  // 14: quaiprotocol.QuaiResponseMessage.trieNode:type_name -> trie.ProtoTrieNode
-	15, // [15:15] is the sub-list for method output_type
-	15, // [15:15] is the sub-list for method input_type
-	15, // [15:15] is the sub-list for extension type_name
-	15, // [15:15] is the sub-list for extension extendee
-	0,  // [0:15] is the sub-list for field type_name
+	5,  // 0: quaiprotocol.GossipBlock.block:type_name -> block.ProtoBlock
+	6,  // 1: quaiprotocol.GossipTransaction.transaction:type_name -> block.ProtoTransaction
+	7,  // 2: quaiprotocol.QuaiRequestMessage.location:type_name -> common.ProtoLocation
+	8,  // 3: quaiprotocol.QuaiRequestMessage.hash:type_name -> common.ProtoHash
+	5,  // 4: quaiprotocol.QuaiRequestMessage.block:type_name -> block.ProtoBlock
+	9,  // 5: quaiprotocol.QuaiRequestMessage.header:type_name -> block.ProtoHeader
+	6,  // 6: quaiprotocol.QuaiRequestMessage.transaction:type_name -> block.ProtoTransaction
+	8,  // 7: quaiprotocol.QuaiRequestMessage.blockHash:type_name -> common.ProtoHash
+	10, // 8: quaiprotocol.QuaiRequestMessage.trieNode:type_name -> trie.ProtoTrieNode
+	7,  // 9: quaiprotocol.QuaiResponseMessage.location:type_name -> common.ProtoLocation
+	5,  // 10: quaiprotocol.QuaiResponseMessage.block:type_name -> block.ProtoBlock
+	9,  // 11: quaiprotocol.QuaiResponseMessage.header:type_name -> block.ProtoHeader
+	6,  // 12: quaiprotocol.QuaiResponseMessage.transaction:type_name -> block.ProtoTransaction
+	8,  // 13: quaiprotocol.QuaiResponseMessage.blockHash:type_name -> common.ProtoHash
+	10, // 14: quaiprotocol.QuaiResponseMessage.trieNode:type_name -> trie.ProtoTrieNode
+	7,  // 15: quaiprotocol.QuaiMessage.location:type_name -> common.ProtoLocation
+	2,  // 16: quaiprotocol.QuaiMessage.request:type_name -> quaiprotocol.QuaiRequestMessage
+	3,  // 17: quaiprotocol.QuaiMessage.response:type_name -> quaiprotocol.QuaiResponseMessage
+	18, // [18:18] is the sub-list for method output_type
+	18, // [18:18] is the sub-list for method input_type
+	18, // [18:18] is the sub-list for extension type_name
+	18, // [18:18] is the sub-list for extension extendee
+	0,  // [0:18] is the sub-list for field type_name
 }
 
 func init() { file_p2p_pb_quai_messages_proto_init() }
@@ -616,6 +731,18 @@ func file_p2p_pb_quai_messages_proto_init() {
 				return nil
 			}
 		}
+		file_p2p_pb_quai_messages_proto_msgTypes[4].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*QuaiMessage); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
 	}
 	file_p2p_pb_quai_messages_proto_msgTypes[2].OneofWrappers = []interface{}{
 		(*QuaiRequestMessage_Hash)(nil),
@@ -633,13 +760,17 @@ func file_p2p_pb_quai_messages_proto_init() {
 		(*QuaiResponseMessage_BlockHash)(nil),
 		(*QuaiResponseMessage_TrieNode)(nil),
 	}
+	file_p2p_pb_quai_messages_proto_msgTypes[4].OneofWrappers = []interface{}{
+		(*QuaiMessage_Request)(nil),
+		(*QuaiMessage_Response)(nil),
+	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_p2p_pb_quai_messages_proto_rawDesc,
 			NumEnums:      0,
-			NumMessages:   4,
+			NumMessages:   5,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
