@@ -9,6 +9,7 @@ import (
 
 	"github.com/dominant-strategies/go-quai/common"
 	"github.com/dominant-strategies/go-quai/core/types"
+	"github.com/dominant-strategies/go-quai/p2p/requestManager"
 	"github.com/dominant-strategies/go-quai/trie"
 )
 
@@ -26,4 +27,5 @@ type QuaiP2PNode interface {
 	GetTrieNode(hash common.Hash, location common.Location) *trie.TrieNodeResponse
 
 	ReadResponses(network.Stream)
+	GetRequestManager() requestManager.RequestManager
 }

@@ -28,7 +28,7 @@ func QuaiProtocolHandler(stream network.Stream, node QuaiP2PNode) {
 		return
 	}
 
-	go node.ReadResponses(stream)
+	// go node.ReadResponses(stream)
 
 	// Enter the read loop for the stream and handle messages
 	for {
@@ -46,7 +46,24 @@ func QuaiProtocolHandler(stream network.Stream, node QuaiP2PNode) {
 		if err != nil {
 			log.Global.Errorf("error decoding quai request: %s", err)
 			// TODO: handle error
-			continue
+
+			recvdID, recvdType, err := pb.DecodeQuaiResponse(data)
+			if err != nil {
+				log.Global.WithField(
+					"err", err,
+				).Errorf("error decoding quai response: %s", err)
+				continue
+			}
+
+			dataChan, err := node.GetRequestManager().GetRequestChan(recvdID)
+			if err != nil {
+				log.Global.WithFields(log.Fields{
+					"requestID": recvdID,
+					"err":       err,
+				}).Error("error associating request ID with data channel")
+				continue
+			}
+			dataChan <- recvdType
 		}
 		switch query.(type) {
 		case *common.Hash:

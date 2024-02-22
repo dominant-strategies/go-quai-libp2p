@@ -147,6 +147,7 @@ func EncodeQuaiResponse(id uint32, location common.Location, data interface{}) (
 //  3. An error
 func DecodeQuaiResponse(data []byte) (uint32, interface{}, error) {
 	var respMsg QuaiResponseMessage
+	log.Global.Warn("------------PROTODECODE DATA: ", data)
 	err := proto.Unmarshal(data, &respMsg)
 	if err != nil {
 		return 0, nil, err
@@ -155,7 +156,6 @@ func DecodeQuaiResponse(data []byte) (uint32, interface{}, error) {
 	id := respMsg.Id
 	sourceLocation := &common.Location{}
 	sourceLocation.ProtoDecode(respMsg.Location)
-	log.Global.Warn("------------locationn in proto decode: ", sourceLocation)
 
 	switch respMsg.Response.(type) {
 	case *QuaiResponseMessage_Block:

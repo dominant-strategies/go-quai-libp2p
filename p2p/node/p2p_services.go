@@ -12,6 +12,7 @@ import (
 	"github.com/dominant-strategies/go-quai/core/types"
 	"github.com/dominant-strategies/go-quai/log"
 	"github.com/dominant-strategies/go-quai/p2p/pb"
+	"github.com/dominant-strategies/go-quai/p2p/requestManager"
 	"github.com/dominant-strategies/go-quai/trie"
 )
 
@@ -113,6 +114,10 @@ func (p *P2PNode) ReadResponses(stream network.Stream) {
 		}
 		dataChan <- recvdType
 	}
+}
+
+func (p *P2PNode) GetRequestManager() requestManager.RequestManager {
+	return p.requestManager
 }
 
 // Creates a Cid from a location to be used as DHT key
