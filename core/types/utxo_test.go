@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 
@@ -20,26 +21,16 @@ func TestSingleSigner(t *testing.T) {
 	// ECDSA key
 	key, err := crypto.HexToECDSA("345debf66bc68724062b236d3b0a6eb30f051e725ebb770f1dc367f2c569f003")
 	if err != nil {
-		fmt.Println(err)
+		t.Fatal(err)
 	}
 	addr := crypto.PubkeyToAddress(key.PublicKey, location)
-	fmt.Println(addr.Hex())
-
 	b, err := hex.DecodeString("345debf66bc68724062b236d3b0a6eb30f051e725ebb770f1dc367f2c569f003")
 	if err != nil {
-		fmt.Println(err)
+		t.Fatal(err)
 	}
 
 	// btcec key for schnorr use
 	btcecKey, _ := btcec.PrivKeyFromBytes(b)
-
-	// Spendable out, could come from anywhere
-	coinbaseOutput := &TxOut{
-		Denomination: uint8(1),
-		Address:      addr.Bytes(),
-	}
-
-	fmt.Println(coinbaseOutput)
 
 	coinbaseBlockHash := common.HexToHash("000000000000000000000000000000000000000000000000000012")
 	coinbaseIndex := uint32(0)
@@ -80,18 +71,17 @@ func TestSingleSigner(t *testing.T) {
 }
 
 func TestMultiSigners(t *testing.T) {
-
 	location := common.Location{0, 0}
 	// ECDSA key
 	key1, err := crypto.HexToECDSA("345debf66bc68724062b236d3b0a6eb30f051e725ebb770f1dc367f2c569f003")
 	if err != nil {
-		fmt.Println(err)
+		t.Fatal(err)
 	}
 	addr1 := crypto.PubkeyToAddress(key1.PublicKey, location)
 
 	b1, err := hex.DecodeString("345debf66bc68724062b236d3b0a6eb30f051e725ebb770f1dc367f2c569f003")
 	if err != nil {
-		fmt.Println(err)
+		t.Fatal(err)
 	}
 
 	// btcec key for schnorr use
@@ -99,26 +89,15 @@ func TestMultiSigners(t *testing.T) {
 
 	key2, err := crypto.HexToECDSA("000000f66bc68724062b236d3b0a6eb30f051e725ebb770f1dc367f2c569f003")
 	if err != nil {
-		fmt.Println(err)
+		t.Fatal(err)
 	}
-	addr2 := crypto.PubkeyToAddress(key2.PublicKey, location)
-	fmt.Println(addr2.Hex())
 
 	b2, err := hex.DecodeString("000000f66bc68724062b236d3b0a6eb30f051e725ebb770f1dc367f2c569f003")
 	if err != nil {
-		fmt.Println(err)
+		t.Fatal(err)
 	}
 
 	btcecKey2, _ := btcec.PrivKeyFromBytes(b2)
-
-	// Spendable out, could come from anywhere
-	coinbaseOutput := &TxOut{
-		Denomination: uint8(1),
-		Address:      addr1.Bytes(),
-	}
-
-	fmt.Println(coinbaseOutput)
-
 	coinbaseIndex := uint32(0)
 
 	coinbaseBlockHash1 := common.HexToHash("00000000000000000000000000000000000000000000000000000")
@@ -263,4 +242,153 @@ func TestMultiSigners(t *testing.T) {
 	if !finalSig.Verify(txHash[:], combinedKey) {
 		t.Fatalf("final sig is invalid!")
 	}
+}
+
+func TestVerify(t *testing.T) {
+	// Test that we mark a signature as valid when it is and invalid when it is not valid
+	testCases := []struct {
+		name           string
+		privateKey     string
+		publicKey      string
+		messageDigest  string
+		signature      string
+		expectedResult bool
+	}{
+		{ // TEST CASE #1:
+			name:           "Confirms a Valid Signature",
+			privateKey:     "c90fdaa22168c234c4c6628b80dc1cd129024e088a67cc74020bbea63b14e5c7",
+			publicKey:      "04fac2114c2fbb091527eb7c64ecb11f8021cb45e8e7809d3c0938e4b8c0e5f84bc655c2105c3c5c380f2c8b8ce2c0c25b0d57062d2d28187254f0deb802b8891f",
+			messageDigest:  "4df3c3f68fcc83b27e9d42c90431a72499f17875c81a599b566c9889b9696703",
+			signature:      "5364b58801791a30ee9f2dfb16bdfb543800eccddb514c56c7b8d75e30d25149ba273d4e61d2bb29f6e9e8a29bc7a31f6653a53bd81cf6994df07e58b1cb768b",
+			expectedResult: true,
+		},
+		{ // TEST CASE #2:
+			name:           "Confirms a Valid Signature",
+			privateKey:     "c90fdaa22168c234c4c6628b80dc1cd129024e088a67cc74020bbea63b14e5c7",
+			publicKey:      "04fac2114c2fbb091527eb7c64ecb11f8021cb45e8e7809d3c0938e4b8c0e5f84bc655c2105c3c5c380f2c8b8ce2c0c25b0d57062d2d28187254f0deb802b8891f",
+			messageDigest:  "0000000000000000000000000000000000000000000000000000000000000000",
+			signature:      "f6b70ab3159a32120c3af5ada42625c08f5f3d412179d8763347a3b3a133b73389b5163772dd8f8c02ea513e81eb244508a81dc4a11495c1ee458a226e178a1a",
+			expectedResult: true,
+		},
+		{ // TEST CASE #3:
+			name:           "Fails signature with public key not on the curve",
+			publicKey:      "03eefdea4cdb677750a420fee807eacf21eb9898ae79b9768766e4faa04a2d4a34",
+			messageDigest:  "4df3c3f68fcc83b27e9d42c90431a72499f17875c81a599b566c9889b9696703",
+			signature:      "00000000000000000000003b78ce563f89a0ed9414f5aa28ad0d96d6795f9c6302a8dc32e64e86a333f20ef56eac9ba30b7246d6d25e22adb8c6be1aeb08d49d",
+			expectedResult: false,
+		},
+		{ // TEST CASE #4: FAILING
+			name:           "Fails signature with incorrect R residuosity",
+			privateKey:     "c90fdaa22168c234c4c6628b80dc1cd129024e088a67cc74020bbea63b14e5c7",
+			publicKey:      "04fac2114c2fbb091527eb7c64ecb11f8021cb45e8e7809d3c0938e4b8c0e5f84bc655c2105c3c5c380f2c8b8ce2c0c25b0d57062d2d28187254f0deb802b8891f",
+			messageDigest:  "243f6a8885a308d313198a2e03707344a4093822299f31d0082efa98ec4e6c89",
+			signature:      "48a215e87777e4fa800d5d2a3d7b858414401727063f2c189355853b9d0f9a87f468606087da7f2373befefa1259e71cccbdc9bd75eadd1a73e346420fa75cf7",
+			expectedResult: false,
+		},
+		{ // TEST CASE #5:
+			name:           "Fails signature with negated message",
+			privateKey:     "c90fdaa22168c234c4c6628b80dc1cd129024e088a67cc74020bbea63b14e5c7",
+			publicKey:      "04fac2114c2fbb091527eb7c64ecb11f8021cb45e8e7809d3c0938e4b8c0e5f84bc655c2105c3c5c380f2c8b8ce2c0c25b0d57062d2d28187254f0deb802b8891f",
+			messageDigest:  "5e2d58d8b3bcdf1abadec7829054f90dda9805aab56c77333024b9d0a508b75c",
+			signature:      "00da9b08172a9b6f0466a2defd817f2d7ab437e0d253cb5395a963866b3574bed092f9d860f1776a1f7412ad8a1eb50daccc222bc8c0e26b2056df2f273efdec",
+			expectedResult: false,
+		},
+		{ // TEST CASE #6:
+			name:           "Fails signature with negated s value",
+			privateKey:     "c90fdaa22168c234c4c6628b80dc1cd129024e088a67cc74020bbea63b14e5c7",
+			publicKey:      "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798",
+			messageDigest:  "0000000000000000000000000000000000000000000000000000000000000000",
+			signature:      "b75dea1788881b057ff2a2d5c2847a7bebbfe8d8f9c0d3e76caa7ac462f065780b979f9f782580dc8c410105eda618e3334236428a1522e58c1cb9bdf058a308",
+			expectedResult: false,
+		},
+	}
+
+	var signature [64]byte
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			publicBytes, _ := hex.DecodeString(testCase.publicKey)
+			msgBytes, _ := hex.DecodeString(testCase.messageDigest)
+			sig, _ := hex.DecodeString(testCase.signature)
+			copy(signature[:], sig)
+			public, err := btcec.ParsePubKey(publicBytes)
+			if err != nil {
+				errorMessage := err.Error()
+				if strings.Contains(errorMessage, "invalid public key") && testCase.expectedResult == false {
+					return
+				}
+				t.Fatal(err)
+			}
+
+			sigFormatted, _ := schnorr.ParseSignature(signature[:])
+			result := sigFormatted.Verify(msgBytes, public)
+
+			if result != testCase.expectedResult { // || err != nil
+				t.Fatalf("Did not confirm/deny validity of signature as expected: Want: %t    Got: %t   Error: %s", testCase.expectedResult, result, err)
+			} else {
+				t.Logf("SUCCESS: Expected verify result. Schnorr Signature is valid: %t    Error: %s", result, err)
+			}
+		})
+	}
+}
+
+// ModifyRSig takes a Schnorr signature and modifies its R component.
+// signatureHex is the original signature in hexadecimal format.
+// It returns the modified signature also in hexadecimal format.
+func TestModifyRSig(t *testing.T) {
+	signatureHex := "b75dea1788881b057ff2a2d5c2847a7bebbfe8d8f9c0d3e76caa7ac462f06578f468606087da7f2373befefa1259e71cccbdc9bd75eadd1a73e346420fa75cf7"
+	// Decode the signature from hex format
+	signatureBytes, err := hex.DecodeString(signatureHex)
+	if err != nil {
+		t.Fatalf("Failed to parse signature: %s", err)
+	}
+
+	// Check if the signature length is even
+	if len(signatureBytes)%2 != 0 {
+		t.Fatalf("Failed to parse signature: %s", err)
+	}
+
+	// Calculate the length of R and S components
+	halfLength := len(signatureBytes) / 2
+
+	// Modify the R component
+	// Here, we simply invert the bytes of the R component
+	// You can replace this logic with any other modification you need
+	for i := 0; i < halfLength; i++ {
+		signatureBytes[i] = ^signatureBytes[i]
+	}
+
+	// Encode the modified signature back to hex format
+	modifiedSigHex := hex.EncodeToString(signatureBytes)
+	t.Log("Modified Signature: ", modifiedSigHex)
+}
+
+// ModifySSig takes a Schnorr signature and modifies its S component.
+// signatureHex is the original signature in hexadecimal format.
+// It returns the modified signature also in hexadecimal format.
+func TestModifySSig(t *testing.T) {
+	signatureHex := "b75dea1788881b057ff2a2d5c2847a7bebbfe8d8f9c0d3e76caa7ac462f06578f468606087da7f2373befefa1259e71cccbdc9bd75eadd1a73e346420fa75cf7"
+	// Decode the signature from hex format
+	signatureBytes, err := hex.DecodeString(signatureHex)
+	if err != nil {
+		t.Fatalf("Failed to parse signature: %s", err)
+	}
+
+	// Check if the signature length is even
+	if len(signatureBytes)%2 != 0 {
+		t.Fatalf("Signature length is not even: %s", err)
+	}
+
+	// Calculate the length of R and S components
+	halfLength := len(signatureBytes) / 2
+
+	// Modify the S component
+	// Here, we simply invert the bytes of the S component
+	// You can replace this logic with any other modification you need
+	for i := halfLength; i < len(signatureBytes); i++ {
+		signatureBytes[i] = ^signatureBytes[i]
+	}
+
+	// Encode the modified signature back to hex format
+	modifiedSigHex := hex.EncodeToString(signatureBytes)
+	t.Log("Modified Signature: ", modifiedSigHex)
 }
