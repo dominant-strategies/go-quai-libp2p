@@ -41,9 +41,6 @@ func (p *P2PNode) requestFromPeer(peerID peer.ID, location common.Location, data
 		return nil, err
 	}
 
-	// Start listening for the response
-	go p.readLoop(stream, location)
-
 	// Send the request to the peer
 	err = common.WriteMessageToStream(stream, requestBytes)
 	if err != nil {
@@ -91,7 +88,7 @@ func (p *P2PNode) requestFromPeer(peerID peer.ID, location common.Location, data
 	return nil, errors.New("invalid response")
 }
 
-func (p *P2PNode) readLoop(stream network.Stream, location common.Location) {
+func (p *P2PNode) ReadResponses(stream network.Stream) {
 	for {
 		message, err := common.ReadMessageFromStream(stream)
 		if err != nil {

@@ -28,6 +28,8 @@ func QuaiProtocolHandler(stream network.Stream, node QuaiP2PNode) {
 		return
 	}
 
+	go node.ReadResponses(stream)
+
 	// Enter the read loop for the stream and handle messages
 	for {
 		data, err := common.ReadMessageFromStream(stream)

@@ -24,4 +24,6 @@ type QuaiP2PNode interface {
 	GetHeader(hash common.Hash, location common.Location) *types.Header
 	GetBlockHashByNumber(number *big.Int, location common.Location) *common.Hash
 	GetTrieNode(hash common.Hash, location common.Location) *trie.TrieNodeResponse
+
+	ReadResponses(network.Stream)
 }

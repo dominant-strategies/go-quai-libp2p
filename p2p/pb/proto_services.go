@@ -106,6 +106,8 @@ func EncodeQuaiResponse(id uint32, location common.Location, data interface{}) (
 		Location: location.ProtoEncode(),
 	}
 
+	log.Global.Warn("------------locationn in proto encode: ", location)
+
 	switch data := data.(type) {
 	case *types.Block:
 		protoBlock, err := data.ProtoEncode()
