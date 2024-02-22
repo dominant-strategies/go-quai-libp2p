@@ -155,6 +155,7 @@ func DecodeQuaiResponse(data []byte) (uint32, interface{}, error) {
 	id := respMsg.Id
 	sourceLocation := &common.Location{}
 	sourceLocation.ProtoDecode(respMsg.Location)
+	log.Global.Warn("------------locationn in proto decode: ", sourceLocation)
 
 	switch respMsg.Response.(type) {
 	case *QuaiResponseMessage_Block:
