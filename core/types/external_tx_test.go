@@ -5,9 +5,9 @@ import (
 )
 
 func TestPendingEtxsValidity(t *testing.T) {
-	pendingEtxs := &PendingEtxs{EmptyHeader(), []Transactions{Transactions{}, Transactions{}, Transactions{}}}
+	pendingEtxs := &PendingEtxs{EmptyHeader(), make(Transactions, 0)}
 
 	t.Log("Len of pendingEtxs", len(pendingEtxs.Etxs))
 
-	pendingEtxs.IsValid(nil, 2)
+	pendingEtxs.IsValid(nil)
 }
