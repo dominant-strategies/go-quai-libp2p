@@ -111,6 +111,7 @@ func generateTestChain(db ethdb.Database, logger *log.Logger) (*core.Genesis, []
 		ExtraData:  []byte("test genesis"),
 		GasLimit:   5000000,
 		Difficulty: big.NewInt(300000000),
+		Coinbase:   testAddr,
 	}
 	generate := func(i int, g *core.BlockGen) {
 		g.OffsetTime(5)
