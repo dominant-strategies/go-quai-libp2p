@@ -58,10 +58,10 @@ var (
 )
 
 var (
-	testKey, _   = crypto.HexToECDSA("b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291")
-	testAddr     = crypto.PubkeyToAddress(testKey.PublicKey, common.Location{0, 0})
+	nodeLocation = common.Location{0, 1}
+	testKey, _   = crypto.HexToECDSA("e6122ba6f706fff23b50654d2a6f47345d135463f32cd6fd3b278fbc0d475394")
+	testAddr     = crypto.PubkeyToAddress(testKey.PublicKey, nodeLocation)
 	testBalance  = big.NewInt(2e15)
-	nodeLocation = common.Location{0, 0}
 )
 
 func newTestBackend(t *testing.T, ctx context.Context) (*node.Node, []*types.Block) {
