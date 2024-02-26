@@ -81,6 +81,33 @@ type Quai struct {
 // New creates a new Quai object (including the
 // initialisation of the common Quai object)
 func New(stack *node.Node, p2p NetworkingAPI, config *quaiconfig.Config, nodeCtx int, logger *log.Logger) (*Quai, error) {
+	chainDb, err := stack.OpenDatabaseWithFreezer("chaindata", config.DatabaseCache, config.DatabaseHandles, config.DatabaseFreezer, "eth/db/chaindata/", false)
+
+	if err != nil {
+		return nil, err
+	}
+
+	quai, err := newCommon(stack, p2p, config, nodeCtx, logger, chainDb, core.NewCore)
+
+	// Set the p2p Networking API
+	quai.p2p = p2p
+	// Subscribe to the Blocks subscription
+	quai.p2p.Subscribe(config.NodeLocation, &types.Block{})
+	quai.p2p.Subscribe(config.NodeLocation, common.Hash{})
+	quai.p2p.Subscribe(config.NodeLocation, &types.Transaction{})
+
+	quai.handler = newHandler(quai.p2p, quai.core, config.NodeLocation)
+	// Start the handler
+	quai.handler.Start()
+
+	if err != nil {
+		return nil, err
+	}
+
+	return quai, nil
+}
+
+func newCommon(stack *node.Node, p2p NetworkingAPI, config *quaiconfig.Config, nodeCtx int, logger *log.Logger, chainDb ethdb.Database, coreFunction core.NewCoreFunction) (*Quai, error) {
 	// Ensure configuration values are compatible and sane
 	if config.Miner.GasPrice == nil || config.Miner.GasPrice.Cmp(common.Big0) <= 0 {
 		logger.WithFields(log.Fields{
@@ -104,10 +131,6 @@ func New(stack *node.Node, p2p NetworkingAPI, config *quaiconfig.Config, nodeCtx
 	}).Info("Allocated trie memory caches")
 
 	// Assemble the Quai object
-	chainDb, err := stack.OpenDatabaseWithFreezer("chaindata", config.DatabaseCache, config.DatabaseHandles, config.DatabaseFreezer, "eth/db/chaindata/", false)
-	if err != nil {
-		return nil, err
-	}
 	chainConfig, _, genesisErr := core.SetupGenesisBlockWithOverride(chainDb, config.Genesis, config.NodeLocation, logger)
 	if genesisErr != nil {
 		return nil, genesisErr
@@ -186,6 +209,11 @@ func New(stack *node.Node, p2p NetworkingAPI, config *quaiconfig.Config, nodeCtx
 			rawdb.WriteDatabaseVersion(chainDb, core.BlockChainVersion)
 		}
 	}
+
+	if config.TxPool.Journal != "" {
+		config.TxPool.Journal = stack.ResolvePath(config.TxPool.Journal)
+	}
+
 	var (
 		vmConfig = vm.Config{
 			EnablePreimageRecording: config.EnablePreimageRecording,
@@ -212,9 +240,10 @@ func New(stack *node.Node, p2p NetworkingAPI, config *quaiconfig.Config, nodeCtx
 	if config.TxPool.Journal != "" {
 		config.TxPool.Journal = stack.ResolvePath(config.TxPool.Journal)
 	}
+	var err error
 
 	logger.WithField("url", quai.config.DomUrl).Info("Dom client")
-	quai.core, err = core.NewCore(chainDb, &config.Miner, quai.isLocalBlock, &config.TxPool, &config.TxLookupLimit, chainConfig, quai.config.SlicesRunning, quai.config.DomUrl, quai.config.SubUrls, quai.engine, cacheConfig, vmConfig, indexerConfig, config.Genesis, logger)
+	quai.core, err = coreFunction(chainDb, &config.Miner, quai.isLocalBlock, &config.TxPool, &config.TxLookupLimit, chainConfig, quai.config.SlicesRunning, quai.config.DomUrl, quai.config.SubUrls, quai.engine, cacheConfig, vmConfig, indexerConfig, config.Genesis, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -224,17 +253,6 @@ func New(stack *node.Node, p2p NetworkingAPI, config *quaiconfig.Config, nodeCtx
 		quai.bloomIndexer = core.NewBloomIndexer(chainDb, params.BloomBitsBlocks, params.BloomConfirms, chainConfig.Location.Context(), logger)
 		quai.bloomIndexer.Start(quai.Core().Slice().HeaderChain())
 	}
-
-	// Set the p2p Networking API
-	quai.p2p = p2p
-	// Subscribe to the Blocks subscription
-	quai.p2p.Subscribe(config.NodeLocation, &types.Block{})
-	quai.p2p.Subscribe(config.NodeLocation, common.Hash{})
-	quai.p2p.Subscribe(config.NodeLocation, &types.Transaction{})
-
-	quai.handler = newHandler(quai.p2p, quai.core, config.NodeLocation)
-	// Start the handler
-	quai.handler.Start()
 
 	quai.APIBackend = &QuaiAPIBackend{stack.Config().ExtRPCEnabled(), quai, nil}
 	// Gasprice oracle is only initiated in zone chains
@@ -250,6 +268,21 @@ func New(stack *node.Node, p2p NetworkingAPI, config *quaiconfig.Config, nodeCtx
 	stack.RegisterAPIs(quai.APIs())
 	stack.RegisterLifecycle(quai)
 	// Check for unclean shutdown
+	return quai, nil
+}
+
+func NewFake(stack *node.Node, p2p NetworkingAPI, config *quaiconfig.Config, nodeCtx int, logger *log.Logger, chainDb ethdb.Database) (*Quai, error) {
+
+	quai, err := newCommon(stack, p2p, config, nodeCtx, logger, chainDb, core.NewFakeCore)
+
+	quai.handler = newHandler(quai.p2p, quai.core, config.NodeLocation)
+	// Start the handler
+	quai.handler.Start()
+
+	if err != nil {
+		return nil, err
+	}
+
 	return quai, nil
 }
 

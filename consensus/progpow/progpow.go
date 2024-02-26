@@ -219,11 +219,13 @@ func NewTester(notify []string, noverify bool) *Progpow {
 // NewFaker creates a progpow consensus engine with a fake PoW scheme that accepts
 // all blocks' seal as valid, though they still have to conform to the Quai
 // consensus rules.
-func NewFaker() *Progpow {
+func NewFaker(logger *log.Logger, nodeLocation common.Location) *Progpow {
 	return &Progpow{
 		config: Config{
-			PowMode: ModeFake,
+			PowMode:      ModeFake,
+			NodeLocation: nodeLocation,
 		},
+		logger: logger,
 	}
 }
 

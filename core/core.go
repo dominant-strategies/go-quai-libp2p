@@ -85,12 +85,18 @@ type IndexerConfig struct {
 	IndexAddressUtxos bool
 }
 
+type NewCoreFunction func(db ethdb.Database, config *Config, isLocalBlock func(block *types.Header) bool, txConfig *TxPoolConfig, txLookupLimit *uint64, chainConfig *params.ChainConfig, slicesRunning []common.Location, domClientUrl string, subClientUrls []string, engine consensus.Engine, cacheConfig *CacheConfig, vmConfig vm.Config, indexerConfig *IndexerConfig, genesis *Genesis, logger *log.Logger) (*Core, error)
+
 func NewCore(db ethdb.Database, config *Config, isLocalBlock func(block *types.Header) bool, txConfig *TxPoolConfig, txLookupLimit *uint64, chainConfig *params.ChainConfig, slicesRunning []common.Location, domClientUrl string, subClientUrls []string, engine consensus.Engine, cacheConfig *CacheConfig, vmConfig vm.Config, indexerConfig *IndexerConfig, genesis *Genesis, logger *log.Logger) (*Core, error) {
 	slice, err := NewSlice(db, config, txConfig, txLookupLimit, isLocalBlock, chainConfig, slicesRunning, domClientUrl, subClientUrls, engine, cacheConfig, indexerConfig, vmConfig, genesis, logger)
 	if err != nil {
 		return nil, err
 	}
 
+	return newCommonCore(slice, engine, logger)
+}
+
+func newCommonCore(slice *Slice, engine consensus.Engine, logger *log.Logger) (*Core, error) {
 	c := &Core{
 		sl:                slice,
 		engine:            engine,
@@ -103,6 +109,23 @@ func NewCore(db ethdb.Database, config *Config, isLocalBlock func(block *types.H
 	// Initialize the sync target to current header parent entropy
 	c.syncTarget = c.CurrentHeader()
 
+	c.AppendQueueProcessCache()
+
+	return c, nil
+}
+
+// Used on unit testing
+func NewFakeCore(db ethdb.Database, config *Config, isLocalBlock func(block *types.Header) bool, txConfig *TxPoolConfig, txLookupLimit *uint64, chainConfig *params.ChainConfig, slicesRunning []common.Location, domClientUrl string, subClientUrls []string, engine consensus.Engine, cacheConfig *CacheConfig, vmConfig vm.Config, indexerConfig *IndexerConfig, genesis *Genesis, logger *log.Logger) (*Core, error) {
+	slice, err := NewFakeSlice(db, config, txConfig, txLookupLimit, isLocalBlock, chainConfig, slicesRunning, domClientUrl, subClientUrls, engine, cacheConfig, indexerConfig, vmConfig, genesis, logger)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return newCommonCore(slice, engine, logger)
+}
+
+func (c *Core) AppendQueueProcessCache() {
 	appendQueue, _ := lru.New(c_maxAppendQueue)
 	c.appendQueue = appendQueue
 
@@ -115,8 +138,6 @@ func NewCore(db ethdb.Database, config *Config, isLocalBlock func(block *types.H
 	go c.updateAppendQueue()
 	go c.startStatsTimer()
 	go c.checkSyncTarget()
-
-	return c, nil
 }
 
 // InsertChain attempts to append a list of blocks to the slice, optionally

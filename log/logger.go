@@ -24,6 +24,7 @@ const (
 	defaultLogMaxBackups = 3    // maximum number of old log files to keep
 	defaultLogMaxAge     = 28   // maximum number of days to retain old log files
 	defaultLogCompress   = true // whether to compress the rotated log files using gzip
+	DebugLevel           = logrus.DebugLevel
 )
 
 var (
