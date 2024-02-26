@@ -335,15 +335,8 @@ func (sl *Slice) Append(header *types.Header, domPendingHeader *types.Header, do
 
 	var time8, time9 common.PrettyDuration
 	var bestPh types.PendingHeader
-	var exist bool
 	if nodeCtx == common.ZONE_CTX {
-		bestPh, exist = sl.readPhCache(sl.bestPhKey)
-		if !exist {
-			sl.WriteBestPhKey(sl.config.GenesisHash)
-			sl.writePhCache(block.Hash(), pendingHeaderWithTermini)
-			bestPh = types.EmptyPendingHeader()
-			sl.logger.WithField("key", sl.bestPhKey).Warn("BestPh Key does not exist")
-		}
+		bestPh, _ = sl.readPhCache(sl.bestPhKey)
 
 		time8 = common.PrettyDuration(time.Since(start))
 
