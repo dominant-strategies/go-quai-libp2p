@@ -70,7 +70,7 @@ func TestUTXOTransactionEncode(t *testing.T) {
 		Address:      to.Bytes(),
 	}
 
-	utxo := &UtxoTx{
+	utxo := &QiTx{
 		ChainID: big.NewInt(1337),
 		TxIn:    TxIns{in},
 		TxOut:   TxOuts{newOut},
