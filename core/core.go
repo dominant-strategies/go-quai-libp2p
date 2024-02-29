@@ -698,7 +698,7 @@ func (c *Core) NewGenesisPendigHeader(pendingHeader *types.Header) {
 	c.sl.NewGenesisPendingHeader(pendingHeader)
 }
 
-func (c *Core) GetPendingHeader() (*types.Header, error) {
+func (c *Core) GetPendingHeader() (*types.WorkObjectHeader, error) {
 	return c.sl.GetPendingHeader()
 }
 

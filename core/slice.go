@@ -810,9 +810,16 @@ func (sl *Slice) poem(externS *big.Int, currentS *big.Int) bool {
 }
 
 // GetPendingHeader is used by the miner to request the current pending header
-func (sl *Slice) GetPendingHeader() (*types.Header, error) {
+func (sl *Slice) GetPendingHeader() (*types.WorkObjectHeader, error) {
 	if ph, exists := sl.readPhCache(sl.bestPhKey); exists {
-		return ph.Header(), nil
+		newWorkObject := &types.WorkObjectHeader{}
+		newWorkObject.SetHeaderHash(ph.Header().Hash())
+		newWorkObject.SetParentHash(ph.Header().ParentHash(sl.NodeCtx()))
+		newWorkObject.SetNumber(ph.Header().Number(sl.NodeCtx()))
+		newWorkObject.SetDifficulty(ph.Header().Difficulty())
+		newWorkObject.SetTxHash(ph.Header().TxHash()) //This is not a real tx hash, but rather root
+		newWorkObject.SetLocation(ph.Header().Location())
+		return newWorkObject, nil
 	} else {
 		return nil, errors.New("empty pending header")
 	}

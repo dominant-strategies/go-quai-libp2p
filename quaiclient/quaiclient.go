@@ -274,8 +274,8 @@ func (ec *Client) SetSyncTarget(ctx context.Context, header *types.Header) {
 //// Miner APIS
 
 // GetPendingHeader gets the latest pending header from the chain.
-func (ec *Client) GetPendingHeader(ctx context.Context) (*types.Header, error) {
-	var pendingHeader *types.Header
+func (ec *Client) GetPendingHeader(ctx context.Context) (*types.WorkObjectHeader, error) {
+	var pendingHeader *types.WorkObjectHeader
 	err := ec.c.CallContext(ctx, &pendingHeader, "quai_getPendingHeader")
 	if err != nil {
 		return nil, err
@@ -284,8 +284,8 @@ func (ec *Client) GetPendingHeader(ctx context.Context) (*types.Header, error) {
 }
 
 // ReceiveMinedHeader sends a mined block back to the node
-func (ec *Client) ReceiveMinedHeader(ctx context.Context, header *types.Header) error {
-	data := header.RPCMarshalHeader()
+func (ec *Client) ReceiveMinedHeader(ctx context.Context, header *types.WorkObjectHeader) error {
+	data := header.RPCMarshalWorkObjectHeader()
 	return ec.c.CallContext(ctx, nil, "quai_receiveMinedHeader", data)
 }
 

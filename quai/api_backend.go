@@ -506,7 +506,7 @@ func (b *QuaiAPIBackend) NewGenesisPendingHeader(pendingHeader *types.Header) {
 	b.quai.core.NewGenesisPendigHeader(pendingHeader)
 }
 
-func (b *QuaiAPIBackend) GetPendingHeader() (*types.Header, error) {
+func (b *QuaiAPIBackend) GetPendingHeader() (*types.WorkObjectHeader, error) {
 	return b.quai.core.GetPendingHeader()
 }
 

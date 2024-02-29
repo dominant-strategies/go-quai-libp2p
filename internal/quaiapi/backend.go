@@ -82,7 +82,7 @@ type Backend interface {
 	UpdateDom(oldTerminus common.Hash, pendingHeader types.PendingHeader, location common.Location)
 	RequestDomToAppendOrFetch(hash common.Hash, entropy *big.Int, order int)
 	NewGenesisPendingHeader(pendingHeader *types.Header)
-	GetPendingHeader() (*types.Header, error)
+	GetPendingHeader() (*types.WorkObjectHeader, error)
 	GetManifest(blockHash common.Hash) (types.BlockManifest, error)
 	GetSubManifest(slice common.Location, blockHash common.Hash) (types.BlockManifest, error)
 	AddPendingEtxs(pEtxs types.PendingEtxs) error

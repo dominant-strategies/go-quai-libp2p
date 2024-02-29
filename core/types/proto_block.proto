@@ -81,10 +81,11 @@ message ProtoAccessList { repeated ProtoAccessTuple access_tuples = 1; }
 message ProtoWorkObjectHeader {
   optional common.ProtoHash header_hash = 1;
   optional common.ProtoHash parent_hash = 2;
-  optional bytes parent_number = 3;
+  optional bytes number = 3;
   optional bytes difficulty = 4;
   optional common.ProtoHash tx_hash = 5;
   optional uint64 nonce = 6;
+  optional common.ProtoLocation location = 7;
 }
 
 message ProtoWorkObjectBlock {

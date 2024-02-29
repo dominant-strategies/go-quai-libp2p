@@ -630,11 +630,12 @@ func (s *PublicBlockChainQuaiAPI) fillSubordinateManifest(b *types.Block) (*type
 func (s *PublicBlockChainQuaiAPI) ReceiveMinedHeader(ctx context.Context, raw json.RawMessage) error {
 	nodeCtx := s.b.NodeCtx()
 	// Decode header and transactions.
-	var header *types.Header
+	var header *types.WorkObjectHeader
 	if err := json.Unmarshal(raw, &header); err != nil {
 		return err
 	}
-	block, err := s.b.ConstructLocalMinedBlock(header)
+	log.Global.Warnf("Header mined %v", header)
+	block, err := s.b.ConstructLocalMinedBlock(nil)
 	if err != nil && err.Error() == core.ErrBadSubManifest.Error() && nodeCtx < common.ZONE_CTX {
 		s.b.Logger().Info("filling sub manifest")
 		// If we just mined this block, and we have a subordinate chain, its possible
@@ -656,7 +657,7 @@ func (s *PublicBlockChainQuaiAPI) ReceiveMinedHeader(ctx context.Context, raw js
 		}
 	}
 	s.b.Logger().WithFields(log.Fields{
-		"number":   header.Number(s.b.NodeCtx()),
+		"number":   header.Number(),
 		"location": header.Location(),
 	}).Info("Received mined header")
 
@@ -781,7 +782,7 @@ func (s *PublicBlockChainQuaiAPI) GetPendingHeader(ctx context.Context) (map[str
 		return nil, errors.New("no pending header found")
 	}
 	// Marshal the response.
-	marshaledPh := pendingHeader.RPCMarshalHeader()
+	marshaledPh := pendingHeader.RPCMarshalWorkObjectHeader()
 	return marshaledPh, nil
 }
 
