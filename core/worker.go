@@ -1093,16 +1093,17 @@ func (w *worker) getPendingBlockBodyKey(header *types.Header) common.Hash {
 
 // AddPendingBlockBody adds an entry in the lru cache for the given pendingBodyKey
 // maps it to body.
-func (w *worker) AddPendingBlockBody(header *types.Header, body *types.Body) {
-	w.pendingBlockBody.ContainsOrAdd(w.getPendingBlockBodyKey(header), body)
+func (w *worker) AddPendingBlockBody(header *types.Header, woBody *types.WorkObject) {
+	w.pendingBlockBody.ContainsOrAdd(w.getPendingBlockBodyKey(header), woBody)
 }
 
 // GetPendingBlockBody gets the block body associated with the given header.
-func (w *worker) GetPendingBlockBody(header *types.Header) *types.Body {
+func (w *worker) GetPendingBlockBody(woHeader *types.WorkObjectHeader) *types.WorkObjectBody {
+	header := w.hc.GetHeaderByHash(woHeader.HeaderHash())
 	key := w.getPendingBlockBodyKey(header)
 	body, ok := w.pendingBlockBody.Get(key)
 	if ok {
-		return body.(*types.Body)
+		return body.(*types.WorkObjectBody)
 	}
 	w.logger.WithField("key", key).Warn("pending block body not found for header")
 	return nil

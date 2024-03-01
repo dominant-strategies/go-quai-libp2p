@@ -457,7 +457,7 @@ func (blake3pow *Blake3pow) Finalize(chain consensus.ChainHeaderReader, header *
 
 // FinalizeAndAssemble implements consensus.Engine, accumulating the block and
 // uncle rewards, setting the final state and assembling the block.
-func (blake3pow *Blake3pow) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header, etxs []*types.Transaction, subManifest types.BlockManifest, receipts []*types.Receipt) (*types.Block, error) {
+func (blake3pow *Blake3pow) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header, etxs []*types.Transaction, subManifest types.BlockManifest, receipts []*types.Receipt) (*types.WorkObjectBody, error) {
 	nodeCtx := blake3pow.config.NodeLocation.Context()
 	if nodeCtx == common.ZONE_CTX && chain.ProcessingState() {
 		// Finalize block
@@ -465,7 +465,7 @@ func (blake3pow *Blake3pow) FinalizeAndAssemble(chain consensus.ChainHeaderReade
 	}
 
 	// Header seems complete, assemble into a block and return
-	return types.NewBlock(header, txs, uncles, etxs, subManifest, receipts, trie.NewStackTrie(nil), nodeCtx), nil
+	return types.NewWorkObjectBody(header, txs, etxs, uncles, subManifest, receipts, trie.NewStackTrie(nil), nodeCtx), nil
 }
 
 func (blake3pow *Blake3pow) ComputePowLight(header *types.Header) (common.Hash, common.Hash) {

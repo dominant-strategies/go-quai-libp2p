@@ -432,12 +432,6 @@ func (ec *Client) GetPendingHeader(ctx context.Context) (*types.Header, error) {
 	return pendingHeader, nil
 }
 
-// ReceiveMinedHeader sends a mined block back to the node
-func (ec *Client) ReceiveMinedHeader(ctx context.Context, header *types.Header) error {
-	data := header.RPCMarshalHeader()
-	return ec.c.CallContext(ctx, nil, "quai_receiveMinedHeader", data)
-}
-
 // Contract Calling
 
 // CallContract executes a message call transaction, which is directly executed in the VM

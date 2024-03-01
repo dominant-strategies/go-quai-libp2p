@@ -12,7 +12,7 @@ import (
 
 type WorkObject struct {
 	woHeader WorkObjectHeader
-	woBlock  WorkObjectBlock
+	woBlock  *WorkObjectBody
 	tx       Transaction
 }
 
@@ -26,7 +26,7 @@ type WorkObjectHeader struct {
 	nonce      BlockNonce
 }
 
-type WorkObjectBlock struct {
+type WorkObjectBody struct {
 	header          *Header
 	transactions    Transactions
 	extTransactions Transactions
@@ -130,24 +130,11 @@ func (wo *WorkObject) SetHeaderHash(headerHash common.Hash) {
 	wo.woHeader.headerHash = headerHash
 }
 
-func NewWorkObject(header *Header, transactions Transactions, extTransactions Transactions, uncles []*Header, manifest BlockManifest, parentHash common.Hash, parentNumber *big.Int, difficulty *big.Int, txHash common.Hash, nonce BlockNonce, headerHash common.Hash, tx Transaction) *WorkObject {
+func NewWorkObject(woHeader *WorkObjectHeader, woBody *WorkObjectBody, tx Transaction) *WorkObject {
 	return &WorkObject{
-		woHeader: WorkObjectHeader{
-			headerHash: headerHash,
-			parentHash: parentHash,
-			number:     parentNumber,
-			difficulty: difficulty,
-			txHash:     txHash,
-			nonce:      nonce,
-		},
-		woBlock: WorkObjectBlock{
-			header:          CopyHeader(header),
-			transactions:    transactions,
-			extTransactions: extTransactions,
-			uncles:          uncles,
-			manifest:        manifest,
-		},
-		tx: tx,
+		woHeader: *woHeader,
+		woBlock:  woBody,
+		tx:       tx,
 	}
 }
 
@@ -207,6 +194,18 @@ func (wh *WorkObjectHeader) Location() common.Location {
 	return wh.location
 }
 
+func NewWorkObjectHeader(headerHash common.Hash, parentHash common.Hash, number *big.Int, difficulty *big.Int, txHash common.Hash, nonce BlockNonce, location common.Location) *WorkObjectHeader {
+	return &WorkObjectHeader{
+		headerHash: headerHash,
+		parentHash: parentHash,
+		number:     number,
+		difficulty: difficulty,
+		txHash:     txHash,
+		nonce:      nonce,
+		location:   location,
+	}
+}
+
 func (wh *WorkObjectHeader) RPCMarshalWorkObjectHeader() map[string]interface{} {
 	result := map[string]interface{}{
 		"headerHash": wh.HeaderHash(),
@@ -263,4 +262,127 @@ func (wh *WorkObjectHeader) SealEncode() *ProtoWorkObjectHeader {
 		TxHash:     &txHash,
 		Location:   location,
 	}
+}
+
+func (wh *WorkObjectHeader) ProtoEncode() *ProtoWorkObjectHeader {
+	hash := common.ProtoHash{Value: wh.HeaderHash().Bytes()}
+	parentHash := common.ProtoHash{Value: wh.ParentHash().Bytes()}
+	txHash := common.ProtoHash{Value: wh.TxHash().Bytes()}
+	number := wh.Number().Bytes()
+	difficulty := wh.Difficulty().Bytes()
+	location := wh.Location().ProtoEncode()
+	nonce := wh.Nonce().Uint64()
+
+	return &ProtoWorkObjectHeader{
+		HeaderHash: &hash,
+		ParentHash: &parentHash,
+		Number:     number,
+		Difficulty: difficulty,
+		TxHash:     &txHash,
+		Location:   location,
+		Nonce:      &nonce,
+	}
+}
+
+// func (wh *WorkObjectHeader) ProtoDecode(data *ProtoWorkObjectHeader) {
+// 	wh.SetHeaderHash(common.BytesToHash(data.HeaderHash.Value))
+// 	wh.SetParentHash(common.BytesToHash(data.ParentHash.Value))
+// 	wh.SetNumber(new(big.Int).SetBytes(data.Number))
+// 	wh.SetDifficulty(new(big.Int).SetBytes(data.Difficulty))
+// 	wh.SetTxHash(common.BytesToHash(data.TxHash.Value))
+// 	wh.SetNonce(new(big.Int).SetBytes(data.Nonce))
+// 	wh.SetLocation(common.ProtoDecodeLocation(data.Location))
+// }
+
+func (wb *WorkObjectBody) Header() *Header {
+	return wb.header
+}
+
+func (wb *WorkObjectBody) Transactions() Transactions {
+	return wb.transactions
+}
+
+func (wb *WorkObjectBody) ExtTransactions() Transactions {
+	return wb.extTransactions
+}
+
+func (wb *WorkObjectBody) Uncles() []*Header {
+	return wb.uncles
+}
+
+func (wb *WorkObjectBody) Manifest() BlockManifest {
+	return wb.manifest
+}
+
+func (wb *WorkObjectBody) SetHeader(header *Header) {
+	wb.header = header
+}
+
+func (wb *WorkObjectBody) SetTransactions(transactions Transactions) {
+	wb.transactions = transactions
+}
+
+func (wb *WorkObjectBody) SetExtTransactions(transactions Transactions) {
+	wb.extTransactions = transactions
+}
+
+func (wb *WorkObjectBody) SetUncles(uncles []*Header) {
+	wb.uncles = uncles
+}
+
+func (wb *WorkObjectBody) SetManifest(manifest BlockManifest) {
+	wb.manifest = manifest
+}
+
+func NewWorkObjectBody(header *Header, txs []*Transaction, etxs []*Transaction, uncles []*Header, subManifest BlockManifest, receipts []*Receipt, hasher TrieHasher, nodeCtx int) *WorkObjectBody {
+	wb := &WorkObjectBody{header: CopyHeader(header)}
+
+	// TODO: panic if len(txs) != len(receipts)
+	if len(txs) == 0 {
+		wb.header.SetTxHash(EmptyRootHash)
+	} else {
+		wb.header.SetTxHash(DeriveSha(Transactions(txs), hasher))
+		wb.transactions = make(Transactions, len(txs))
+		copy(wb.transactions, txs)
+	}
+
+	if len(receipts) == 0 {
+		wb.header.SetReceiptHash(EmptyRootHash)
+	} else {
+		wb.header.SetReceiptHash(DeriveSha(Receipts(receipts), hasher))
+	}
+
+	if len(uncles) == 0 {
+		wb.header.SetUncleHash(EmptyUncleHash)
+	} else {
+		wb.header.SetUncleHash(CalcUncleHash(uncles))
+		wb.uncles = make([]*Header, len(uncles))
+		for i := range uncles {
+			wb.uncles[i] = CopyHeader(uncles[i])
+		}
+	}
+
+	if len(etxs) == 0 {
+		wb.header.SetEtxHash(EmptyRootHash)
+	} else {
+		wb.header.SetEtxHash(DeriveSha(Transactions(etxs), hasher))
+		wb.extTransactions = make(Transactions, len(etxs))
+		copy(wb.extTransactions, etxs)
+	}
+
+	// Since the subordinate's manifest lives in our body, we still need to check
+	// that the manifest matches the subordinate's manifest hash, but we do not set
+	// the subordinate's manifest hash.
+	subManifestHash := EmptyRootHash
+	if len(subManifest) != 0 {
+		subManifestHash = DeriveSha(subManifest, hasher)
+		wb.manifest = make(BlockManifest, len(subManifest))
+		copy(wb.manifest, subManifest)
+	}
+	if nodeCtx < common.ZONE_CTX && subManifestHash != wb.Header().ManifestHash(nodeCtx+1) {
+		log.Global.Error("attempted to build block with invalid subordinate manifest")
+		return nil
+	}
+
+	return wb
 }

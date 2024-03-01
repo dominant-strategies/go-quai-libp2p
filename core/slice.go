@@ -1257,11 +1257,11 @@ func (sl *Slice) ConstructLocalBlock(header *types.Header) (*types.Block, error)
 // constructLocalMinedBlock takes a header and construct the Block locally by getting the block
 // body from the workers pendingBlockBodyCache. This method is used when the miner sends in the
 // header.
-func (sl *Slice) ConstructLocalMinedBlock(header *types.Header) (*types.Block, error) {
+func (sl *Slice) ConstructLocalMinedBlock(woHeader *types.WorkObjectHeader) (*types.Block, error) {
 	nodeCtx := sl.NodeLocation().Context()
 	var pendingBlockBody *types.Body
 	if nodeCtx == common.ZONE_CTX {
-		pendingBlockBody = sl.GetPendingBlockBody(header)
+		pendingBlockBody = sl.GetPendingBlockBody(woHeader)
 		if pendingBlockBody == nil {
 			return nil, ErrBodyNotFound
 		}
@@ -1389,8 +1389,8 @@ func (sl *Slice) NewGenesisPendingHeader(domPendingHeader *types.Header) {
 	}
 }
 
-func (sl *Slice) GetPendingBlockBody(header *types.Header) *types.Body {
-	return sl.miner.worker.GetPendingBlockBody(header)
+func (sl *Slice) GetPendingBlockBody(woHeader *types.WorkObjectHeader) *types.WorkObjectBody {
+	return sl.miner.worker.GetPendingBlockBody(woHeader)
 }
 
 func (sl *Slice) SubscribeMissingBlockEvent(ch chan<- types.BlockRequest) event.Subscription {

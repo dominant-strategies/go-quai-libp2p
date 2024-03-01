@@ -630,12 +630,12 @@ func (s *PublicBlockChainQuaiAPI) fillSubordinateManifest(b *types.Block) (*type
 func (s *PublicBlockChainQuaiAPI) ReceiveMinedHeader(ctx context.Context, raw json.RawMessage) error {
 	nodeCtx := s.b.NodeCtx()
 	// Decode header and transactions.
-	var header *types.WorkObjectHeader
-	if err := json.Unmarshal(raw, &header); err != nil {
+	var woHeader *types.WorkObjectHeader
+	if err := json.Unmarshal(raw, &woHeader); err != nil {
 		return err
 	}
-	log.Global.Warnf("Header mined %v", header)
-	block, err := s.b.ConstructLocalMinedBlock(nil)
+	log.Global.Warnf("Header mined %v", woHeader)
+	block, err := s.b.ConstructLocalMinedBlock(woHeader)
 	if err != nil && err.Error() == core.ErrBadSubManifest.Error() && nodeCtx < common.ZONE_CTX {
 		s.b.Logger().Info("filling sub manifest")
 		// If we just mined this block, and we have a subordinate chain, its possible
@@ -657,8 +657,8 @@ func (s *PublicBlockChainQuaiAPI) ReceiveMinedHeader(ctx context.Context, raw js
 		}
 	}
 	s.b.Logger().WithFields(log.Fields{
-		"number":   header.Number(),
-		"location": header.Location(),
+		"number":   woHeader.Number(),
+		"location": woHeader.Location(),
 	}).Info("Received mined header")
 
 	return nil
