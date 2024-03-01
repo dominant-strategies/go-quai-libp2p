@@ -40,3 +40,4 @@ go-quai:
 	$(GORUN) build/ci.go build ./cmd/go-quai
 	@echo "Done building."
 	@echo "Run \"$(GOBIN)/go-quai\" to launch go-quai."
+
