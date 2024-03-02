@@ -1,6 +1,7 @@
 package types
 
 import (
+	"errors"
 	"math/big"
 
 	"github.com/dominant-strategies/go-quai/common"
@@ -12,7 +13,7 @@ import (
 
 type WorkObject struct {
 	woHeader WorkObjectHeader
-	woBlock  *WorkObjectBody
+	woBody   *WorkObjectBody
 	tx       Transaction
 }
 
@@ -35,23 +36,23 @@ type WorkObjectBody struct {
 }
 
 func (wo *WorkObject) Header() *Header {
-	return wo.woBlock.header
+	return wo.woBody.header
 }
 
 func (wo *WorkObject) Transactions() Transactions {
-	return wo.woBlock.transactions
+	return wo.woBody.transactions
 }
 
 func (wo *WorkObject) ExtTransactions() Transactions {
-	return wo.woBlock.extTransactions
+	return wo.woBody.extTransactions
 }
 
 func (wo *WorkObject) Uncles() []*Header {
-	return wo.woBlock.uncles
+	return wo.woBody.uncles
 }
 
 func (wo *WorkObject) Manifest() BlockManifest {
-	return wo.woBlock.manifest
+	return wo.woBody.manifest
 }
 
 func (wo *WorkObject) ParentHash() common.Hash {
@@ -87,23 +88,23 @@ func (wo *WorkObject) SetTx(tx Transaction) {
 }
 
 func (wo *WorkObject) SetHeader(header *Header) {
-	wo.woBlock.header = header
+	wo.woBody.header = header
 }
 
 func (wo *WorkObject) SetTransactions(transactions Transactions) {
-	wo.woBlock.transactions = transactions
+	wo.woBody.transactions = transactions
 }
 
 func (wo *WorkObject) SetExtTransactions(transactions Transactions) {
-	wo.woBlock.extTransactions = transactions
+	wo.woBody.extTransactions = transactions
 }
 
 func (wo *WorkObject) SetUncles(uncles []*Header) {
-	wo.woBlock.uncles = uncles
+	wo.woBody.uncles = uncles
 }
 
 func (wo *WorkObject) SetManifest(manifest BlockManifest) {
-	wo.woBlock.manifest = manifest
+	wo.woBody.manifest = manifest
 }
 
 func (wo *WorkObject) SetParentHash(parentHash common.Hash) {
@@ -133,9 +134,48 @@ func (wo *WorkObject) SetHeaderHash(headerHash common.Hash) {
 func NewWorkObject(woHeader *WorkObjectHeader, woBody *WorkObjectBody, tx Transaction) *WorkObject {
 	return &WorkObject{
 		woHeader: *woHeader,
-		woBlock:  woBody,
+		woBody:   woBody,
 		tx:       tx,
 	}
+}
+
+func (wo *WorkObject) ProtoEncode() (*ProtoWorkObject, error) {
+	header, err := wo.woHeader.ProtoEncode()
+	if err != nil {
+		return nil, err
+	}
+	body, err := wo.woBody.ProtoEncode()
+	if err != nil {
+		return nil, err
+	}
+	tx, err := wo.tx.ProtoEncode()
+	if err != nil {
+		return nil, err
+	}
+	return &ProtoWorkObject{
+		WoHeader: header,
+		WoBody:   body,
+		Tx:       tx,
+	}, nil
+}
+
+func (wo *WorkObject) ProtoDecode(data *ProtoWorkObject, location common.Location) error {
+	protoWoHeader := new(ProtoWorkObjectHeader)
+	err := wo.woHeader.ProtoDecode(protoWoHeader)
+	if err != nil {
+		return err
+	}
+	protoWoBody := new(ProtoWorkObjectBody)
+	err = wo.woBody.ProtoDecode(protoWoBody, location)
+	if err != nil {
+		return err
+	}
+	protoTx := new(ProtoTransaction)
+	err = wo.tx.ProtoDecode(protoTx, location)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (wh *WorkObjectHeader) SetHeaderHash(headerHash common.Hash) {
@@ -264,7 +304,7 @@ func (wh *WorkObjectHeader) SealEncode() *ProtoWorkObjectHeader {
 	}
 }
 
-func (wh *WorkObjectHeader) ProtoEncode() *ProtoWorkObjectHeader {
+func (wh *WorkObjectHeader) ProtoEncode() (*ProtoWorkObjectHeader, error) {
 	hash := common.ProtoHash{Value: wh.HeaderHash().Bytes()}
 	parentHash := common.ProtoHash{Value: wh.ParentHash().Bytes()}
 	txHash := common.ProtoHash{Value: wh.TxHash().Bytes()}
@@ -281,18 +321,25 @@ func (wh *WorkObjectHeader) ProtoEncode() *ProtoWorkObjectHeader {
 		TxHash:     &txHash,
 		Location:   location,
 		Nonce:      &nonce,
-	}
+	}, nil
 }
 
-// func (wh *WorkObjectHeader) ProtoDecode(data *ProtoWorkObjectHeader) {
-// 	wh.SetHeaderHash(common.BytesToHash(data.HeaderHash.Value))
-// 	wh.SetParentHash(common.BytesToHash(data.ParentHash.Value))
-// 	wh.SetNumber(new(big.Int).SetBytes(data.Number))
-// 	wh.SetDifficulty(new(big.Int).SetBytes(data.Difficulty))
-// 	wh.SetTxHash(common.BytesToHash(data.TxHash.Value))
-// 	wh.SetNonce(new(big.Int).SetBytes(data.Nonce))
-// 	wh.SetLocation(common.ProtoDecodeLocation(data.Location))
-// }
+func (wh *WorkObjectHeader) ProtoDecode(data *ProtoWorkObjectHeader) error {
+	if data.HeaderHash == nil || data.ParentHash == nil || data.Number == nil || data.Difficulty == nil || data.TxHash == nil || data.Nonce == nil || data.Location == nil {
+		err := errors.New("failed to decode work object header")
+		log.Global.WithField("err", err).Warn()
+		return err
+	}
+	wh.SetHeaderHash(common.BytesToHash(data.GetHeaderHash().Value))
+	wh.SetParentHash(common.BytesToHash(data.GetParentHash().Value))
+	wh.SetNumber(new(big.Int).SetBytes(data.GetNumber()))
+	wh.SetDifficulty(new(big.Int).SetBytes(data.Difficulty))
+	wh.SetTxHash(common.BytesToHash(data.GetTxHash().Value))
+	wh.SetNonce(uint64ToByteArr(data.GetNonce()))
+	wh.SetLocation(data.GetLocation().GetValue())
+
+	return nil
+}
 
 func (wb *WorkObjectBody) Header() *Header {
 	return wb.header
@@ -385,4 +432,72 @@ func NewWorkObjectBody(header *Header, txs []*Transaction, etxs []*Transaction, 
 	}
 
 	return wb
+}
+
+func (wb *WorkObjectBody) ProtoEncode() (*ProtoWorkObjectBody, error) {
+	header, err := wb.header.ProtoEncode()
+	if err != nil {
+		return nil, err
+	}
+
+	protoTransactions, err := wb.transactions.ProtoEncode()
+	if err != nil {
+		return nil, err
+	}
+
+	protoExtTransactions, err := wb.extTransactions.ProtoEncode()
+	if err != nil {
+		return nil, err
+	}
+
+	protoUncles := &ProtoHeaders{}
+	for _, unc := range wb.uncles {
+		protoUncle, err := unc.ProtoEncode()
+		if err != nil {
+			return nil, err
+		}
+		protoUncles.Headers = append(protoUncles.Headers, protoUncle)
+	}
+
+	protoManifest, err := wb.manifest.ProtoEncode()
+	if err != nil {
+		return nil, err
+	}
+
+	return &ProtoWorkObjectBody{
+		Header:          header,
+		Transactions:    protoTransactions,
+		ExtTransactions: protoExtTransactions,
+		Uncles:          protoUncles,
+		Manifest:        protoManifest,
+	}, nil
+}
+
+func (wb *WorkObjectBody) ProtoDecode(data *ProtoWorkObjectBody, location common.Location) error {
+	header := new(ProtoHeader)
+	err := wb.header.ProtoDecode(header)
+	if err != nil {
+		return err
+	}
+	wb.transactions = Transactions{}
+	err = wb.transactions.ProtoDecode(data.GetTransactions(), location)
+	if err != nil {
+		return err
+	}
+	wb.extTransactions = Transactions{}
+	err = wb.extTransactions.ProtoDecode(data.GetExtTransactions(), location)
+	if err != nil {
+		return err
+	}
+	wb.uncles = make([]*Header, len(data.GetUncles().GetHeaders()))
+	for i, protoUncle := range data.GetUncles().GetHeaders() {
+		uncle := &Header{}
+		err = uncle.ProtoDecode(protoUncle)
+		if err != nil {
+			return err
+		}
+		wb.uncles[i] = uncle
+	}
+
+	return nil
 }

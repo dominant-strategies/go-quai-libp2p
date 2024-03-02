@@ -630,6 +630,147 @@ func DeleteTermini(db ethdb.KeyValueWriter, hash common.Hash) {
 	}
 }
 
+// ReadWorkObjectHeader retreive's the work object header stored in hash.
+func ReadWorkObjectHeader(db ethdb.Reader, hash common.Hash) *types.WorkObjectHeader {
+	key := workObjectHeaderKey(hash)
+	data, _ := db.Get(key)
+	if len(data) == 0 {
+		return nil
+	}
+	protoWorkObjectHeader := new(types.ProtoWorkObjectHeader)
+	err := proto.Unmarshal(data, protoWorkObjectHeader)
+	if err != nil {
+		log.Global.WithField("err", err).Fatal("Failed to proto Unmarshal work object header")
+	}
+	workObjectHeader := new(types.WorkObjectHeader)
+	err = workObjectHeader.ProtoDecode(protoWorkObjectHeader)
+	if err != nil {
+		log.Global.WithFields(log.Fields{
+			"hash": hash,
+			"err":  err,
+		}).Error("Invalid work object header Proto")
+		return nil
+	}
+	return workObjectHeader
+}
+
+// WriteWorkObjectHeader writes the work object header of the terminus hash.
+func WriteWorkObjectHeader(db ethdb.KeyValueWriter, hash common.Hash, workObjectHeader types.WorkObjectHeader) {
+	key := workObjectHeaderKey(hash)
+	protoWorkObjectHeader, _ := workObjectHeader.ProtoEncode()
+	data, err := proto.Marshal(protoWorkObjectHeader)
+	if err != nil {
+		log.Global.WithField("err", err).Fatal("Failed to proto Marshal work object header")
+	}
+	if err := db.Put(key, data); err != nil {
+		log.Global.WithField("err", err).Fatal("Failed to store work object header")
+	}
+}
+
+// DeleteWorkObjectHeader deletes the work object header stored for the header hash.
+func DeleteWorkObjectHeader(db ethdb.KeyValueWriter, hash common.Hash) {
+	key := workObjectHeaderKey(hash)
+	if err := db.Delete(key); err != nil {
+		log.Global.WithField("err", err).Fatal("Failed to delete work object header ")
+	}
+}
+
+// ReadWorkObject retreive's the work object stored in hash.
+func ReadWorkObject(db ethdb.Reader, hash common.Hash, location common.Location) *types.WorkObject {
+	key := workObjectKey(hash)
+	data, _ := db.Get(key)
+	if len(data) == 0 {
+		return nil
+	}
+	protoWorkObject := new(types.ProtoWorkObject)
+	err := proto.Unmarshal(data, protoWorkObject)
+	if err != nil {
+		log.Global.WithField("err", err).Fatal("Failed to proto Unmarshal work object")
+	}
+	workObject := new(types.WorkObject)
+	err = workObject.ProtoDecode(protoWorkObject, location)
+	if err != nil {
+		log.Global.WithFields(log.Fields{
+			"hash": hash,
+			"err":  err,
+		}).Error("Invalid work object Proto")
+		return nil
+	}
+	return workObject
+}
+
+// WriteWorkObject writes the work object of the terminus hash.
+func WriteWorkObject(db ethdb.KeyValueWriter, hash common.Hash, workObject types.WorkObject) {
+	key := workObjectKey(hash)
+	protoWorkObject, err := workObject.ProtoEncode()
+	if err != nil {
+		log.Global.WithField("err", err).Fatal("Failed to proto encode work object")
+	}
+	data, err := proto.Marshal(protoWorkObject)
+	if err != nil {
+		log.Global.WithField("err", err).Fatal("Failed to proto Marshal work object")
+	}
+	if err := db.Put(key, data); err != nil {
+		log.Global.WithField("err", err).Fatal("Failed to store work object")
+	}
+}
+
+// DeleteWorkObject deletes the work object stored for the header hash.
+func DeleteWorkObject(db ethdb.KeyValueWriter, hash common.Hash) {
+	key := workObjectKey(hash)
+	if err := db.Delete(key); err != nil {
+		log.Global.WithField("err", err).Fatal("Failed to delete work object ")
+	}
+}
+
+// ReadWorkObjectBody retreive's the work object body stored in hash.
+func ReadWorkObjectBody(db ethdb.Reader, hash common.Hash, location common.Location) *types.WorkObjectBody {
+	key := workObjectBodyKey(hash)
+	data, _ := db.Get(key)
+	if len(data) == 0 {
+		return nil
+	}
+	protoWorkObjectBody := new(types.ProtoWorkObjectBody)
+	err := proto.Unmarshal(data, protoWorkObjectBody)
+	if err != nil {
+		log.Global.WithField("err", err).Fatal("Failed to proto Unmarshal work object body")
+	}
+	workObjectBody := new(types.WorkObjectBody)
+	err = workObjectBody.ProtoDecode(protoWorkObjectBody, location)
+	if err != nil {
+		log.Global.WithFields(log.Fields{
+			"hash": hash,
+			"err":  err,
+		}).Error("Invalid work object body Proto")
+		return nil
+	}
+	return workObjectBody
+}
+
+// WriteWorkObjectBody writes the work object body of the terminus hash.
+func WriteWorkObjectBody(db ethdb.KeyValueWriter, hash common.Hash, workObjectBody types.WorkObjectBody) {
+	key := workObjectBodyKey(hash)
+	protoWorkObjectBody, err := workObjectBody.ProtoEncode()
+	if err != nil {
+		log.Global.WithField("err", err).Fatal("Failed to proto encode work object body")
+	}
+	data, err := proto.Marshal(protoWorkObjectBody)
+	if err != nil {
+		log.Global.WithField("err", err).Fatal("Failed to proto Marshal work object body")
+	}
+	if err := db.Put(key, data); err != nil {
+		log.Global.WithField("err", err).Fatal("Failed to store work object body")
+	}
+}
+
+// DeleteWorkObjectBody deletes the work object body stored for the header hash.
+func DeleteWorkObjectBody(db ethdb.KeyValueWriter, hash common.Hash) {
+	key := workObjectBodyKey(hash)
+	if err := db.Delete(key); err != nil {
+		log.Global.WithField("err", err).Fatal("Failed to delete work object body ")
+	}
+}
+
 // ReadPendingHeader retreive's the pending header stored in hash.
 func ReadPendingHeader(db ethdb.Reader, hash common.Hash) *types.PendingHeader {
 	key := pendingHeaderKey(hash)

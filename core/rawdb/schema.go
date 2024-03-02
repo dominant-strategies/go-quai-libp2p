@@ -87,18 +87,21 @@ var (
 	headerHashSuffix         = []byte("n")  // headerPrefix + num (uint64 big endian) + headerHashSuffix -> hash
 	headerNumberPrefix       = []byte("H")  // headerNumberPrefix + hash -> num (uint64 big endian)
 
-	pendingHeaderPrefix = []byte("ph")    // pendingHeaderPrefix + hash -> header
-	candidateBodyPrefix = []byte("cb")    // candidateBodyPrefix + hash -> Body
-	pbBodyPrefix        = []byte("pb")    // pbBodyPrefix + hash -> *types.Body
-	pbBodyHashPrefix    = []byte("pbKey") // pbBodyPrefix -> []common.Hash
-	phTerminiPrefix     = []byte("pht")   // phTerminiPrefix + hash -> []common.Hash
-	phBodyPrefix        = []byte("pc")    // phBodyPrefix + hash -> []common.Hash + Td
-	terminiPrefix       = []byte("tk")    //terminiPrefix + hash -> []common.Hash
-	badHashesListPrefix = []byte("bh")
-	inboundEtxsPrefix   = []byte("ie")    // inboundEtxsPrefix + hash -> types.Transactions
-	UtxoPrefix          = []byte("ut")    // outpointPrefix + hash -> types.Outpoint
-	spentUTXOsPrefix    = []byte("sutxo") // spentUTXOsPrefix + hash -> []types.SpentTxOut
-	AddressUtxosPrefix  = []byte("au")    // addressUtxosPrefix + hash -> []types.UtxoEntry
+	pendingHeaderPrefix    = []byte("ph")    // pendingHeaderPrefix + hash -> header
+	candidateBodyPrefix    = []byte("cb")    // candidateBodyPrefix + hash -> Body
+	pbBodyPrefix           = []byte("pb")    // pbBodyPrefix + hash -> *types.Body
+	pbBodyHashPrefix       = []byte("pbKey") // pbBodyPrefix -> []common.Hash
+	phTerminiPrefix        = []byte("pht")   // phTerminiPrefix + hash -> []common.Hash
+	phBodyPrefix           = []byte("pc")    // phBodyPrefix + hash -> []common.Hash + Td
+	terminiPrefix          = []byte("tk")    //terminiPrefix + hash -> []common.Hash
+	workObjectHeaderPrefix = []byte("wh")    //workObjectHeaderPrefix + hash -> []common.Hash
+	workObjectBodyPrefix   = []byte("wb")    //workObjectBodyPrefix + hash -> []common.Hash
+	workObjectPrefix       = []byte("wo")    //workObjectPrefix + hash -> []common.Hash
+	badHashesListPrefix    = []byte("bh")
+	inboundEtxsPrefix      = []byte("ie")    // inboundEtxsPrefix + hash -> types.Transactions
+	UtxoPrefix             = []byte("ut")    // outpointPrefix + hash -> types.Outpoint
+	spentUTXOsPrefix       = []byte("sutxo") // spentUTXOsPrefix + hash -> []types.SpentTxOut
+	AddressUtxosPrefix     = []byte("au")    // addressUtxosPrefix + hash -> []types.UtxoEntry
 
 	blockBodyPrefix         = []byte("b")  // blockBodyPrefix + num (uint64 big endian) + hash -> block body
 	blockReceiptsPrefix     = []byte("r")  // blockReceiptsPrefix + num (uint64 big endian) + hash -> block receipts
@@ -197,6 +200,21 @@ func headerKey(number uint64, hash common.Hash) []byte {
 // terminiKey = domPendingHeaderPrefix + hash
 func terminiKey(hash common.Hash) []byte {
 	return append(terminiPrefix, hash.Bytes()...)
+}
+
+// workObjectHeaderKey = workObjectHeaderPrefix + hash
+func workObjectHeaderKey(hash common.Hash) []byte {
+	return append(workObjectHeaderPrefix, hash.Bytes()...)
+}
+
+// workObjectKey = workObjectPrefix + hash
+func workObjectKey(hash common.Hash) []byte {
+	return append(workObjectPrefix, hash.Bytes()...)
+}
+
+// workObjectBodyKey = workObjectBodyPrefix + hash
+func workObjectBodyKey(hash common.Hash) []byte {
+	return append(workObjectBodyPrefix, hash.Bytes()...)
 }
 
 // pendingHeaderKey = pendingHeaderPrefix + hash
