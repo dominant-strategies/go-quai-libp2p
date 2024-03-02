@@ -1177,7 +1177,7 @@ func (c *writeCounter) Write(b []byte) (int, error) {
 	return len(b), nil
 }
 
-func CalcUncleHash(uncles []*Header) common.Hash {
+func CalcUncleHash(uncles []*WorkObject) common.Hash {
 	if len(uncles) == 0 {
 		return EmptyUncleHash
 	}

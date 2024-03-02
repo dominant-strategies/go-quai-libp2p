@@ -40,6 +40,7 @@ type BodyDb struct {
 	blockCache     *lru.Cache
 	bodyCache      *lru.Cache
 	bodyProtoCache *lru.Cache
+	woCache        *lru.Cache
 	processor      *StateProcessor
 
 	slicesRunning []common.Location
@@ -68,6 +69,7 @@ func NewBodyDb(db ethdb.Database, engine consensus.Engine, hc *HeaderChain, chai
 		bc.blockCache = blockCache
 		bc.bodyCache = bodyCache
 		bc.bodyProtoCache = bodyRLPCache
+		bc.woCache, _ = lru.New(bodyCacheLimit)
 	} else {
 		blockCache, _ := lru.New(10)
 		bodyCache, _ := lru.New(10)
@@ -75,6 +77,7 @@ func NewBodyDb(db ethdb.Database, engine consensus.Engine, hc *HeaderChain, chai
 		bc.blockCache = blockCache
 		bc.bodyCache = bodyCache
 		bc.bodyProtoCache = bodyRLPCache
+		bc.woCache, _ = lru.New(10)
 	}
 
 	// only start the state processor in zone
@@ -168,6 +171,26 @@ func (bc *BodyDb) GetBlock(hash common.Hash, number uint64) *types.Block {
 	// Cache the found block for next time and return
 	bc.blockCache.Add(block.Hash(), block)
 	return block
+}
+
+// GetWorkObject retrieves a workObject from the database by hash and number,
+// caching it if found.
+func (bc *BodyDb) GetWorkObject(hash common.Hash, number uint64) *types.WorkObject {
+	termini := rawdb.ReadTermini(bc.db, hash)
+	if termini == nil {
+		return nil
+	}
+	// Short circuit if the block's already in the cache, retrieve otherwise
+	if wo, ok := bc.woCache.Get(hash); ok {
+		return wo.(*types.WorkObject)
+	}
+	wo := rawdb.ReadWorkObject(bc.db, hash, bc.NodeLocation())
+	if wo == nil {
+		return nil
+	}
+	// Cache the found block for next time and return
+	bc.woCache.Add(wo.Hash(), wo)
+	return wo
 }
 
 func (bc *BodyDb) GetUtxo(hash common.Hash, index uint32) *types.UtxoEntry {

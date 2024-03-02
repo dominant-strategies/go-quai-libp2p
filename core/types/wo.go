@@ -31,12 +31,36 @@ type WorkObjectBody struct {
 	header          *Header
 	transactions    Transactions
 	extTransactions Transactions
-	uncles          []*Header
+	uncles          []*WorkObject
 	manifest        BlockManifest
 }
 
 func (wo *WorkObject) Header() *Header {
 	return wo.woBody.header
+}
+
+func (wo *WorkObject) Body() *WorkObjectBody {
+	return wo.woBody
+}
+
+func (wo *WorkObject) Hash() common.Hash {
+	return wo.woHeader.Hash()
+}
+
+func (wo *WorkObject) SealHash() common.Hash {
+	return wo.woHeader.SealHash()
+}
+
+func (wo *WorkObject) SealEncode() *ProtoWorkObjectHeader {
+	return wo.woHeader.SealEncode()
+}
+
+func (wo *WorkObject) WorkObjectHeader() *WorkObjectHeader {
+	return &wo.woHeader
+}
+
+func (wo *WorkObject) NumberU64(nodeCtx int) uint64 {
+	return wo.Header().NumberU64(nodeCtx)
 }
 
 func (wo *WorkObject) Transactions() Transactions {
@@ -47,7 +71,7 @@ func (wo *WorkObject) ExtTransactions() Transactions {
 	return wo.woBody.extTransactions
 }
 
-func (wo *WorkObject) Uncles() []*Header {
+func (wo *WorkObject) Uncles() []*WorkObject {
 	return wo.woBody.uncles
 }
 
@@ -99,7 +123,7 @@ func (wo *WorkObject) SetExtTransactions(transactions Transactions) {
 	wo.woBody.extTransactions = transactions
 }
 
-func (wo *WorkObject) SetUncles(uncles []*Header) {
+func (wo *WorkObject) SetUncles(uncles []*WorkObject) {
 	wo.woBody.uncles = uncles
 }
 
@@ -136,6 +160,14 @@ func NewWorkObject(woHeader *WorkObjectHeader, woBody *WorkObjectBody, tx Transa
 		woHeader: *woHeader,
 		woBody:   woBody,
 		tx:       tx,
+	}
+}
+
+func (wo *WorkObject) CopyWorkObject() *WorkObject {
+	return &WorkObject{
+		woHeader: *wo.woHeader.CopyWorkObjectHeader(),
+		woBody:   wo.woBody.CopyWorkObjectBody(),
+		tx:       wo.tx,
 	}
 }
 
@@ -246,6 +278,18 @@ func NewWorkObjectHeader(headerHash common.Hash, parentHash common.Hash, number 
 	}
 }
 
+func (wh *WorkObjectHeader) CopyWorkObjectHeader() *WorkObjectHeader {
+	cpy := *wh
+	cpy.SetHeaderHash(wh.HeaderHash())
+	cpy.SetParentHash(wh.ParentHash())
+	cpy.SetNumber(new(big.Int).Set(wh.Number()))
+	cpy.SetDifficulty(new(big.Int).Set(wh.Difficulty()))
+	cpy.SetTxHash(wh.TxHash())
+	cpy.SetNonce(wh.Nonce())
+	cpy.SetLocation(wh.Location())
+	return &cpy
+}
+
 func (wh *WorkObjectHeader) RPCMarshalWorkObjectHeader() map[string]interface{} {
 	result := map[string]interface{}{
 		"headerHash": wh.HeaderHash(),
@@ -353,7 +397,7 @@ func (wb *WorkObjectBody) ExtTransactions() Transactions {
 	return wb.extTransactions
 }
 
-func (wb *WorkObjectBody) Uncles() []*Header {
+func (wb *WorkObjectBody) Uncles() []*WorkObject {
 	return wb.uncles
 }
 
@@ -373,7 +417,7 @@ func (wb *WorkObjectBody) SetExtTransactions(transactions Transactions) {
 	wb.extTransactions = transactions
 }
 
-func (wb *WorkObjectBody) SetUncles(uncles []*Header) {
+func (wb *WorkObjectBody) SetUncles(uncles []*WorkObject) {
 	wb.uncles = uncles
 }
 
@@ -381,7 +425,7 @@ func (wb *WorkObjectBody) SetManifest(manifest BlockManifest) {
 	wb.manifest = manifest
 }
 
-func NewWorkObjectBody(header *Header, txs []*Transaction, etxs []*Transaction, uncles []*Header, subManifest BlockManifest, receipts []*Receipt, hasher TrieHasher, nodeCtx int) *WorkObjectBody {
+func NewWorkObjectBody(header *Header, txs []*Transaction, etxs []*Transaction, uncles []*WorkObject, subManifest BlockManifest, receipts []*Receipt, hasher TrieHasher, nodeCtx int) *WorkObjectBody {
 	wb := &WorkObjectBody{header: CopyHeader(header)}
 
 	// TODO: panic if len(txs) != len(receipts)
@@ -403,9 +447,9 @@ func NewWorkObjectBody(header *Header, txs []*Transaction, etxs []*Transaction, 
 		wb.header.SetUncleHash(EmptyUncleHash)
 	} else {
 		wb.header.SetUncleHash(CalcUncleHash(uncles))
-		wb.uncles = make([]*Header, len(uncles))
+		wb.uncles = make([]*WorkObject, len(uncles))
 		for i := range uncles {
-			wb.uncles[i] = CopyHeader(uncles[i])
+			wb.uncles[i] = uncles[i].CopyWorkObject()
 		}
 	}
 
@@ -434,6 +478,12 @@ func NewWorkObjectBody(header *Header, txs []*Transaction, etxs []*Transaction, 
 	return wb
 }
 
+func (wb *WorkObjectBody) CopyWorkObjectBody() *WorkObjectBody {
+	cpy := *wb
+	cpy.SetHeader(CopyHeader(wb.Header()))
+	return &cpy
+}
+
 func (wb *WorkObjectBody) ProtoEncode() (*ProtoWorkObjectBody, error) {
 	header, err := wb.header.ProtoEncode()
 	if err != nil {
@@ -450,13 +500,13 @@ func (wb *WorkObjectBody) ProtoEncode() (*ProtoWorkObjectBody, error) {
 		return nil, err
 	}
 
-	protoUncles := &ProtoHeaders{}
+	protoUncles := &ProtoWorkObjects{}
 	for _, unc := range wb.uncles {
 		protoUncle, err := unc.ProtoEncode()
 		if err != nil {
 			return nil, err
 		}
-		protoUncles.Headers = append(protoUncles.Headers, protoUncle)
+		protoUncles.WorkObjects = append(protoUncles.WorkObjects, protoUncle)
 	}
 
 	protoManifest, err := wb.manifest.ProtoEncode()
@@ -489,15 +539,7 @@ func (wb *WorkObjectBody) ProtoDecode(data *ProtoWorkObjectBody, location common
 	if err != nil {
 		return err
 	}
-	wb.uncles = make([]*Header, len(data.GetUncles().GetHeaders()))
-	for i, protoUncle := range data.GetUncles().GetHeaders() {
-		uncle := &Header{}
-		err = uncle.ProtoDecode(protoUncle)
-		if err != nil {
-			return err
-		}
-		wb.uncles[i] = uncle
-	}
+	wb.uncles = []*WorkObject{}
 
 	return nil
 }

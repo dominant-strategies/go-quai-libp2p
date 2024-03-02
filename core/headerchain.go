@@ -232,11 +232,11 @@ func (hc *HeaderChain) GetBloom(hash common.Hash) (*types.Bloom, error) {
 
 // Collect all emmitted ETXs since the last coincident block, but excluding
 // those emitted in this block
-func (hc *HeaderChain) CollectEtxRollup(b *types.Block) (types.Transactions, error) {
+func (hc *HeaderChain) CollectEtxRollup(b *types.WorkObject) (types.Transactions, error) {
 	if b.NumberU64(hc.NodeCtx()) == 0 && b.Hash() == hc.config.GenesisHash {
 		return b.ExtTransactions(), nil
 	}
-	parent := hc.GetBlock(b.ParentHash(hc.NodeCtx()), b.NumberU64(hc.NodeCtx())-1)
+	parent := hc.GetBlock(b.Header().ParentHash(hc.NodeCtx()), b.NumberU64(hc.NodeCtx())-1)
 	if parent == nil {
 		return nil, errors.New("parent not found")
 	}
@@ -971,6 +971,10 @@ func (hc *HeaderChain) Config() *params.ChainConfig { return hc.config }
 // a header chain does not have blocks available for retrieval.
 func (hc *HeaderChain) GetBlock(hash common.Hash, number uint64) *types.Block {
 	return hc.bc.GetBlock(hash, number)
+}
+
+func (hc *HeaderChain) GetWorkObject(hash common.Hash, number uint64) *types.WorkObject {
+	return hc.bc.GetWorkObject(hash, number)
 }
 
 // CheckContext checks to make sure the range of a context or order is valid

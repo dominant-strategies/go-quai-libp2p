@@ -92,7 +92,7 @@ message ProtoWorkObjectBody {
   optional ProtoHeader header = 1;
   optional ProtoTransactions transactions = 2;
   optional ProtoTransactions ext_transactions = 3;
-  optional ProtoHeaders uncles = 4;
+  optional ProtoWorkObjects uncles = 4;
   optional ProtoManifest manifest = 5;
 }
 
@@ -101,6 +101,8 @@ message ProtoWorkObject {
   optional ProtoWorkObjectBody wo_body = 2;
   optional ProtoTransaction tx = 3;
 }
+
+message ProtoWorkObjects { repeated ProtoWorkObject work_objects = 1; }
 
 message ProtoAccessTuple {
   bytes address = 1;
