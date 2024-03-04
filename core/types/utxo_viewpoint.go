@@ -239,9 +239,9 @@ func (view *UtxoViewpoint) ConnectTransaction(tx *Transaction, header *Header, s
 	return nil
 }
 
-func (view *UtxoViewpoint) ConnectTransactions(block *Block, stxos *[]SpentTxOut) error {
-	for _, tx := range block.QiTransactions() {
-		view.ConnectTransaction(tx, block.header, stxos)
+func (view *UtxoViewpoint) ConnectTransactions(wo *WorkObject, stxos *[]SpentTxOut) error {
+	for _, tx := range wo.QiTransactions() {
+		view.ConnectTransaction(tx, wo.Header(), stxos)
 	}
 	return nil
 }

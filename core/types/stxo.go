@@ -22,8 +22,8 @@ type SpentTxOut struct {
 }
 
 // countSpentOutputs returns the number of utxos the passed block spends.
-func CountSpentOutputs(block *Block) int {
-	transactions := block.QiTransactions()
+func CountSpentOutputs(wo *WorkObject) int {
+	transactions := wo.QiTransactions()
 	if len(transactions) == 0 {
 		return 0
 	}

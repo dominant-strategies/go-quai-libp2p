@@ -49,7 +49,7 @@ type Blockchain interface {
 	Config() *params.ChainConfig
 
 	// Genesis retrieves the chain's genesis block.
-	Genesis() *types.Block
+	Genesis() *types.WorkObject
 
 	// CurrentHeader retrieves the current head header of the canonical chain.
 	CurrentHeader() *types.Header

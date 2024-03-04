@@ -33,7 +33,7 @@ var (
 	headHeaderKey = []byte("LastHeader")
 
 	// headBlockKey tracks the latest known full block's hash.
-	headBlockKey = []byte("LastBlock")
+	headWorkObjectKey = []byte("LastWorkObject")
 
 	// headersHashKey tracks the latest known headers hash in Blockchain.
 	headsHashesKey = []byte("HeadersHash")
@@ -74,8 +74,8 @@ var (
 	// fastTxLookupLimitKey tracks the transaction lookup limit during fast sync.
 	fastTxLookupLimitKey = []byte("FastTransactionLookupLimit")
 
-	// badBlockKey tracks the list of bad blocks seen by local
-	badBlockKey = []byte("InvalidBlock")
+	// badWorkObjectKey tracks the list of bad blocks seen by local
+	badWorkObjectKey = []byte("InvalidWorkObject")
 
 	// uncleanShutdownKey tracks the list of local crashes
 	uncleanShutdownKey = []byte("unclean-shutdown") // config prefix for the db

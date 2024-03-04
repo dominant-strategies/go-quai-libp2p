@@ -39,6 +39,10 @@ func (wo *WorkObject) Header() *Header {
 	return wo.woBody.header
 }
 
+func (wo *WorkObject) WorkObjectHeader() *WorkObjectHeader {
+	return &wo.woHeader
+}
+
 func (wo *WorkObject) Body() *WorkObjectBody {
 	return wo.woBody
 }
@@ -53,10 +57,6 @@ func (wo *WorkObject) SealHash() common.Hash {
 
 func (wo *WorkObject) SealEncode() *ProtoWorkObjectHeader {
 	return wo.woHeader.SealEncode()
-}
-
-func (wo *WorkObject) WorkObjectHeader() *WorkObjectHeader {
-	return &wo.woHeader
 }
 
 func (wo *WorkObject) NumberU64(nodeCtx int) uint64 {
@@ -83,8 +83,8 @@ func (wo *WorkObject) ParentHash() common.Hash {
 	return wo.woHeader.parentHash
 }
 
-func (wo *WorkObject) Number() *big.Int {
-	return wo.woHeader.number
+func (wo *WorkObject) Number(nodeCtx int) *big.Int {
+	return wo.woBody.header.Number(nodeCtx)
 }
 
 func (wo *WorkObject) Difficulty() *big.Int {
@@ -105,6 +105,14 @@ func (wo *WorkObject) HeaderHash() common.Hash {
 
 func (wo *WorkObject) Tx() Transaction {
 	return wo.tx
+}
+
+func (wo *WorkObject) Location() common.Location {
+	return wo.woHeader.location
+}
+
+func (wo *WorkObject) EVMRoot() common.Hash {
+	return wo.woBody.header.EVMRoot()
 }
 
 func (wo *WorkObject) SetTx(tx Transaction) {
@@ -153,6 +161,38 @@ func (wo *WorkObject) SetNonce(nonce BlockNonce) {
 
 func (wo *WorkObject) SetHeaderHash(headerHash common.Hash) {
 	wo.woHeader.headerHash = headerHash
+}
+
+func (wo *WorkObject) QiTransactions() []*Transaction {
+	return wo.woBody.QiTransactions()
+}
+
+func (wo *WorkObject) QuaiTransactions() []*Transaction {
+	return wo.woBody.QuaiTransactions()
+}
+
+func (wo *WorkObject) BaseFee() *big.Int {
+	return wo.woBody.header.BaseFee()
+}
+
+func (wo *WorkObject) GasUsed() uint64 {
+	return wo.woBody.header.GasUsed()
+}
+
+func (wo *WorkObject) GasLimit() uint64 {
+	return wo.woBody.header.GasLimit()
+}
+
+func (wo *WorkObject) Time() uint64 {
+	return wo.woBody.header.Time()
+}
+
+func (wo *WorkObject) Extra() []byte {
+	return wo.woBody.header.Extra()
+}
+
+func (wo *WorkObject) Coinbase() common.Address {
+	return wo.woBody.header.Coinbase()
 }
 
 func NewWorkObject(woHeader *WorkObjectHeader, woBody *WorkObjectBody, tx Transaction) *WorkObject {
@@ -248,6 +288,10 @@ func (wh *WorkObjectHeader) ParentHash() common.Hash {
 
 func (wh *WorkObjectHeader) Number() *big.Int {
 	return wh.number
+}
+
+func (wh *WorkObjectHeader) NumberU64() uint64 {
+	return wh.number.Uint64()
 }
 
 func (wh *WorkObjectHeader) Difficulty() *big.Int {
@@ -542,4 +586,31 @@ func (wb *WorkObjectBody) ProtoDecode(data *ProtoWorkObjectBody, location common
 	wb.uncles = []*WorkObject{}
 
 	return nil
+}
+func (wb *WorkObjectBody) QiTransactions() []*Transaction {
+	// TODO: cache the UTXO loop
+	qiTxs := make([]*Transaction, 0)
+	for _, t := range wb.Transactions() {
+		if t.Type() == QiTxType {
+			qiTxs = append(qiTxs, t)
+		}
+	}
+	return qiTxs
+}
+
+func (wb *WorkObjectBody) QuaiTransactions() []*Transaction {
+	quaiTxs := make([]*Transaction, 0)
+	for _, t := range wb.Transactions() {
+		if t.Type() != QiTxType {
+			quaiTxs = append(quaiTxs, t)
+		}
+	}
+	return quaiTxs
+}
+
+func CalcUncleHash(uncles []*WorkObject) common.Hash {
+	if len(uncles) == 0 {
+		return EmptyUncleHash
+	}
+	return RlpHash(uncles)
 }

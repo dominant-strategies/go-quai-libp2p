@@ -51,7 +51,7 @@ type blockFees struct {
 	// set by the caller
 	blockNumber uint64
 	header      *types.Header
-	block       *types.Block // only set if reward percentiles are requested
+	block       *types.WorkObject // only set if reward percentiles are requested
 	receipts    types.Receipts
 	// filled by processBlock
 	reward               []*big.Int
@@ -132,10 +132,10 @@ func (oracle *Oracle) processBlock(bf *blockFees, percentiles []float64) {
 // also returned if requested and available.
 // Note: an error is only returned if retrieving the head header has failed. If there are no
 // retrievable blocks in the specified range then zero block count is returned with no error.
-func (oracle *Oracle) resolveBlockRange(ctx context.Context, lastBlock rpc.BlockNumber, blocks, maxHistory int) (*types.Block, []*types.Receipt, uint64, int, error) {
+func (oracle *Oracle) resolveBlockRange(ctx context.Context, lastBlock rpc.BlockNumber, blocks, maxHistory int) (*types.WorkObject, []*types.Receipt, uint64, int, error) {
 	var (
 		headBlock       rpc.BlockNumber
-		pendingBlock    *types.Block
+		pendingBlock    *types.WorkObject
 		pendingReceipts types.Receipts
 		nodeCtx         = oracle.backend.ChainConfig().Location.Context()
 	)
@@ -227,7 +227,7 @@ func (oracle *Oracle) FeeHistory(ctx context.Context, blocks int, unresolvedLast
 		maxHistory = oracle.maxBlockHistory
 	}
 	var (
-		pendingBlock    *types.Block
+		pendingBlock    *types.WorkObject
 		pendingReceipts []*types.Receipt
 		err             error
 	)

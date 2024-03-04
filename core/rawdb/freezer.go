@@ -332,7 +332,7 @@ func (f *freezer) freeze(db ethdb.KeyValueStore, nodeCtx int) {
 			}
 		}
 		// Retrieve the freezing threshold.
-		hash := ReadHeadBlockHash(nfdb)
+		hash := ReadHeadWorkObjectHash(nfdb)
 		if hash == (common.Hash{}) {
 			f.logger.Debug("Current full block hash unavailable") // new chain, empty database
 			backoff = true
@@ -462,7 +462,7 @@ func (f *freezer) freeze(db ethdb.KeyValueStore, nodeCtx int) {
 						"number": number,
 						"hash":   hash,
 					}).Trace("Deleting side chain")
-					DeleteBlock(batch, hash, number)
+					DeleteWorkObject(batch, hash, number)
 				}
 			}
 		}
@@ -505,7 +505,7 @@ func (f *freezer) freeze(db ethdb.KeyValueStore, nodeCtx int) {
 						"hash":   children[i],
 						"parent": child.ParentHash(nodeCtx),
 					}).Debug("Deleting dangling block")
-					DeleteBlock(batch, children[i], tip)
+					DeleteWorkObject(batch, children[i], tip)
 				}
 				dangling = children
 				tip++
