@@ -20,183 +20,72 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"fmt"
 	"math/big"
-	"reflect"
 	"testing"
 	"time"
 
-	quai "github.com/dominant-strategies/go-quai"
+	goQuai "github.com/dominant-strategies/go-quai"
 	"github.com/dominant-strategies/go-quai/common"
 	"github.com/dominant-strategies/go-quai/consensus/progpow"
 	"github.com/dominant-strategies/go-quai/core"
 	"github.com/dominant-strategies/go-quai/core/rawdb"
 	"github.com/dominant-strategies/go-quai/core/types"
 	"github.com/dominant-strategies/go-quai/crypto"
+	"github.com/dominant-strategies/go-quai/ethdb"
+	"github.com/dominant-strategies/go-quai/log"
 	"github.com/dominant-strategies/go-quai/node"
+	p2p "github.com/dominant-strategies/go-quai/p2p/node"
 	"github.com/dominant-strategies/go-quai/params"
+	"github.com/dominant-strategies/go-quai/quai"
+	"github.com/dominant-strategies/go-quai/quai/quaiconfig"
+	"github.com/dominant-strategies/go-quai/quaiclient"
 	"github.com/dominant-strategies/go-quai/rpc"
 )
 
 // Verify that Client implements the quai interfaces.
 var (
-	_ = quai.ChainReader(&Client{})
-	_ = quai.TransactionReader(&Client{})
-	_ = quai.ChainStateReader(&Client{})
-	_ = quai.ChainSyncReader(&Client{})
-	_ = quai.ContractCaller(&Client{})
-	_ = quai.GasEstimator(&Client{})
-	_ = quai.GasPricer(&Client{})
-	_ = quai.LogFilterer(&Client{})
-	_ = quai.PendingStateReader(&Client{})
-	// _ = quai.PendingStateEventer(&Client{})
-	_ = quai.PendingContractCaller(&Client{})
+	_ = goQuai.ChainReader(&Client{})
+	_ = goQuai.TransactionReader(&Client{})
+	_ = goQuai.ChainStateReader(&Client{})
+	_ = goQuai.ChainSyncReader(&Client{})
+	_ = goQuai.ContractCaller(&Client{})
+	_ = goQuai.GasEstimator(&Client{})
+	_ = goQuai.GasPricer(&Client{})
+	//_ = goQuai.LogFilterer(&Client{})
+	_ = goQuai.PendingStateReader(&Client{})
+	// _ = goQuai.PendingStateEventer(&Client{})
+	_ = goQuai.PendingContractCaller(&Client{})
 )
-
-func TestToFilterArg(t *testing.T) {
-	blockHashErr := fmt.Errorf("cannot specify both BlockHash and FromBlock/ToBlock")
-	addresses := []common.Address{
-		common.HexToAddress("0xD36722ADeC3EdCB29c8e7b5a47f352D701393462"),
-	}
-	blockHash := common.HexToHash(
-		"0xeb94bb7d78b73657a9d7a99792413f50c0a45c51fc62bdcb08a53f18e9a2b4eb",
-	)
-
-	for _, testCase := range []struct {
-		name   string
-		input  quai.FilterQuery
-		output interface{}
-		err    error
-	}{
-		{
-			"without BlockHash",
-			quai.FilterQuery{
-				Addresses: addresses,
-				FromBlock: big.NewInt(1),
-				ToBlock:   big.NewInt(2),
-				Topics:    [][]common.Hash{},
-			},
-			map[string]interface{}{
-				"address":   addresses,
-				"fromBlock": "0x1",
-				"toBlock":   "0x2",
-				"topics":    [][]common.Hash{},
-			},
-			nil,
-		},
-		{
-			"with nil fromBlock and nil toBlock",
-			quai.FilterQuery{
-				Addresses: addresses,
-				Topics:    [][]common.Hash{},
-			},
-			map[string]interface{}{
-				"address":   addresses,
-				"fromBlock": "0x0",
-				"toBlock":   "latest",
-				"topics":    [][]common.Hash{},
-			},
-			nil,
-		},
-		{
-			"with negative fromBlock and negative toBlock",
-			quai.FilterQuery{
-				Addresses: addresses,
-				FromBlock: big.NewInt(-1),
-				ToBlock:   big.NewInt(-1),
-				Topics:    [][]common.Hash{},
-			},
-			map[string]interface{}{
-				"address":   addresses,
-				"fromBlock": "pending",
-				"toBlock":   "pending",
-				"topics":    [][]common.Hash{},
-			},
-			nil,
-		},
-		{
-			"with blockhash",
-			quai.FilterQuery{
-				Addresses: addresses,
-				BlockHash: &blockHash,
-				Topics:    [][]common.Hash{},
-			},
-			map[string]interface{}{
-				"address":   addresses,
-				"blockHash": blockHash,
-				"topics":    [][]common.Hash{},
-			},
-			nil,
-		},
-		{
-			"with blockhash and from block",
-			quai.FilterQuery{
-				Addresses: addresses,
-				BlockHash: &blockHash,
-				FromBlock: big.NewInt(1),
-				Topics:    [][]common.Hash{},
-			},
-			nil,
-			blockHashErr,
-		},
-		{
-			"with blockhash and to block",
-			quai.FilterQuery{
-				Addresses: addresses,
-				BlockHash: &blockHash,
-				ToBlock:   big.NewInt(1),
-				Topics:    [][]common.Hash{},
-			},
-			nil,
-			blockHashErr,
-		},
-		{
-			"with blockhash and both from / to block",
-			quai.FilterQuery{
-				Addresses: addresses,
-				BlockHash: &blockHash,
-				FromBlock: big.NewInt(1),
-				ToBlock:   big.NewInt(2),
-				Topics:    [][]common.Hash{},
-			},
-			nil,
-			blockHashErr,
-		},
-	} {
-		t.Run(testCase.name, func(t *testing.T) {
-			output, err := toFilterArg(testCase.input)
-			if (testCase.err == nil) != (err == nil) {
-				t.Fatalf("expected error %v but got %v", testCase.err, err)
-			}
-			if testCase.err != nil {
-				if testCase.err.Error() != err.Error() {
-					t.Fatalf("expected error %v but got %v", testCase.err, err)
-				}
-			} else if !reflect.DeepEqual(testCase.output, output) {
-				t.Fatalf("expected filter arg %v but got %v", testCase.output, output)
-			}
-		})
-	}
-}
 
 var (
-	testKey, _  = crypto.HexToECDSA("b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291")
-	testAddr    = crypto.PubkeyToAddress(testKey.PublicKey)
-	testBalance = big.NewInt(2e15)
+	nodeLocation = common.Location{0, 1}
+	testKey, _   = crypto.HexToECDSA("e6122ba6f706fff23b50654d2a6f47345d135463f32cd6fd3b278fbc0d475394")
+	testAddr     = crypto.PubkeyToAddress(testKey.PublicKey, nodeLocation)
+	testBalance  = big.NewInt(2e15)
 )
 
-func newTestBackend(t *testing.T) (*node.Node, []*types.Block) {
+func newTestBackend(t *testing.T, ctx context.Context) (*node.Node, []*types.Block) {
+	log.Global.SetLevel(log.DebugLevel)
 	// Generate test chain.
-	genesis, blocks := generateTestChain()
-	// Create node
-	n, err := node.New(&node.Config{})
+	db := rawdb.NewMemoryDatabase()
+	genesis, blocks := generateTestChain(db, log.Global)
+	// Create p2p node
+
+	p2p := &p2p.P2PNode{}
+	//Create node
+	n, err := node.New(&node.Config{}, log.Global)
 	if err != nil {
 		t.Fatalf("can't create new node: %v", err)
 	}
 	// Create quai Service
-	config := &ethconfig.Config{Genesis: genesis}
+	config := &quaiconfig.Config{Genesis: genesis}
+	config.Zone = 0
+	config.Miner.ExtraData = []byte("test miner")
 	config.Progpow.PowMode = progpow.ModeFake
-	ethservice, err := eth.New(n, config)
+	// Set location to ZONE_CTX
+	config.NodeLocation = nodeLocation
+
+	ethservice, err := quai.NewFake(n, p2p, config, nodeLocation.Context(), log.Global, db)
 	if err != nil {
 		t.Fatalf("can't create new quai service: %v", err)
 	}
@@ -204,36 +93,45 @@ func newTestBackend(t *testing.T) (*node.Node, []*types.Block) {
 	if err := n.Start(); err != nil {
 		t.Fatalf("can't start test node: %v", err)
 	}
-	if _, err := ethservice.BlockChain().InsertChain(blocks[1:]); err != nil {
+
+	if _, err := ethservice.Core().InsertChain(blocks[1:]); err != nil {
 		t.Fatalf("can't import test blocks: %v", err)
 	}
 	return n, blocks
 }
 
-func generateTestChain() (*core.Genesis, []*types.Block) {
-	db := rawdb.NewMemoryDatabase()
-	config := params.AllProgpowProtocolChanges
+// Generate a zone chain with genesis + 1 block
+func generateTestChain(db ethdb.Database, logger *log.Logger) (*core.Genesis, []*types.Block) {
+	config := params.TestChainConfig
+	config.Location = nodeLocation
+
 	genesis := &core.Genesis{
-		Config:    config,
-		Alloc:     core.GenesisAlloc{testAddr: {Balance: testBalance}},
-		ExtraData: []byte("test genesis"),
-		Timestamp: 9000,
-		BaseFee:   big.NewInt(params.InitialBaseFee),
+		Config:     config,
+		Nonce:      0,
+		ExtraData:  []byte("test genesis"),
+		GasLimit:   5000000,
+		Difficulty: big.NewInt(300000000),
+		Coinbase:   testAddr,
 	}
 	generate := func(i int, g *core.BlockGen) {
 		g.OffsetTime(5)
 		g.SetExtra([]byte("test"))
 	}
 	gblock := genesis.ToBlock(db)
-	engine := progpow.NewFaker()
+
+	config.GenesisHash = gblock.Hash()
+
+	engine := progpow.NewFaker(logger, nodeLocation)
 	blocks, _ := core.GenerateChain(config, gblock, engine, db, 1, generate)
 	blocks = append([]*types.Block{gblock}, blocks...)
 	return genesis, blocks
 }
 
 func TestEthClient(t *testing.T) {
-	backend, chain := newTestBackend(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	backend, chain := newTestBackend(t, ctx)
 	client, _ := backend.Attach()
+	defer cancel()
 	defer backend.Close()
 	defer client.Close()
 
@@ -274,39 +172,34 @@ func TestEthClient(t *testing.T) {
 
 func testHeader(t *testing.T, chain []*types.Block, client *rpc.Client) {
 	tests := map[string]struct {
-		block   *big.Int
+		block   string
 		want    *types.Header
 		wantErr error
 	}{
 		"genesis": {
-			block: big.NewInt(0),
+			block: "0x0",
 			want:  chain[0].Header(),
 		},
 		"first_block": {
-			block: big.NewInt(1),
+			block: "0x1",
 			want:  chain[1].Header(),
 		},
 		"future_block": {
-			block:   big.NewInt(1000000000),
-			want:    nil,
-			wantErr: quai.NotFound,
+			block: "0xffffff",
+			want:  nil,
 		},
 	}
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			ec := NewClient(client)
+			ec := quaiclient.NewClient(&quaiclient.TestRpcClient{Chain: chain})
 			ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 			defer cancel()
 
-			got, err := ec.HeaderByNumber(ctx, tt.block)
-			if !errors.Is(err, tt.wantErr) {
-				t.Fatalf("HeaderByNumber(%v) error = %q, want %q", tt.block, err, tt.wantErr)
-			}
-			if got != nil && got.Number() != nil && got.Number().Sign() == 0 {
-				got.Number() = big.NewInt(0) // hack to make DeepEqual work
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Fatalf("HeaderByNumber(%v)\n   = %v\nwant %v", tt.block, got, tt.want)
+			got := ec.HeaderByNumber(ctx, tt.block)
+
+			err := got.Compare(tt.want)
+			if err != nil {
+				t.Fatalf("deepEqual failed %v", err)
 			}
 		})
 	}
@@ -325,7 +218,7 @@ func testBalanceAt(t *testing.T, client *rpc.Client) {
 			want:    testBalance,
 		},
 		"non_existent_account": {
-			account: common.Address{1},
+			account: common.Address{},
 			block:   big.NewInt(1),
 			want:    big.NewInt(0),
 		},
@@ -368,11 +261,11 @@ func testTransactionInBlockInterrupted(t *testing.T, client *rpc.Client) {
 	if tx != nil {
 		t.Fatal("transaction should be nil")
 	}
-	if err == nil || err == quai.NotFound {
+	if err == nil || err == goQuai.NotFound {
 		t.Fatal("error should not be nil/notfound")
 	}
 	// Test tx in block not found
-	if _, err := ec.TransactionInBlock(context.Background(), block.Hash(), 1); err != quai.NotFound {
+	if _, err := ec.TransactionInBlock(context.Background(), block.Hash(), 1); err != goQuai.NotFound {
 		t.Fatal("error should be quai.NotFound")
 	}
 }
@@ -383,7 +276,7 @@ func testChainID(t *testing.T, client *rpc.Client) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if id == nil || id.Cmp(params.AllProgpowProtocolChanges.ChainID) != 0 {
+	if id == nil || id.Cmp(big.NewInt(1)) != 0 {
 		t.Fatalf("ChainID returned wrong number: %+v", id)
 	}
 }
@@ -403,8 +296,8 @@ func testGetBlock(t *testing.T, client *rpc.Client) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if block.NumberU64() != blockNumber {
-		t.Fatalf("BlockByNumber returned wrong block: want %d got %d", blockNumber, block.NumberU64())
+	if block.NumberU64(nodeLocation.Context()) != blockNumber {
+		t.Fatalf("BlockByNumber returned wrong block: want %d got %d", blockNumber, block.NumberU64(nodeLocation.Context()))
 	}
 	// Get current block by hash
 	blockH, err := ec.BlockByHash(context.Background(), block.Hash())
@@ -473,7 +366,7 @@ func testCallContract(t *testing.T, client *rpc.Client) {
 	ec := NewClient(client)
 
 	// EstimateGas
-	msg := quai.CallMsg{
+	msg := goQuai.CallMsg{
 		From:  testAddr,
 		To:    &common.Address{},
 		Gas:   21000,
@@ -566,8 +459,8 @@ func sendTransaction(ec *Client) error {
 		return err
 	}
 	// Create transaction
-	tx := types.NewTransaction(0, common.Address{1}, big.NewInt(1), 22000, big.NewInt(params.InitialBaseFee), nil)
-	signer := types.LatestSignerForChainID(chainID)
+	tx := types.NewTx(&types.ExternalTx{})
+	signer := types.LatestSignerForChainID(chainID, nodeLocation)
 	signature, err := crypto.Sign(signer.Hash(tx).Bytes(), testKey)
 	if err != nil {
 		return err

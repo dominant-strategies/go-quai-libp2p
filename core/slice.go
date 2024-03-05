@@ -86,6 +86,23 @@ type Slice struct {
 
 func NewSlice(db ethdb.Database, config *Config, txConfig *TxPoolConfig, txLookupLimit *uint64, isLocalBlock func(block *types.Header) bool, chainConfig *params.ChainConfig, slicesRunning []common.Location, domClientUrl string, subClientUrls []string, engine consensus.Engine, cacheConfig *CacheConfig, indexerConfig *IndexerConfig, vmConfig vm.Config, genesis *Genesis, logger *log.Logger) (*Slice, error) {
 	nodeCtx := chainConfig.Location.Context()
+	sl, err := newSliceCommon(db, config, txConfig, txLookupLimit, isLocalBlock, chainConfig, slicesRunning, domClientUrl, subClientUrls, engine, cacheConfig, indexerConfig, vmConfig, genesis, nodeCtx, logger)
+
+	if err != nil {
+		return nil, err
+	}
+
+	// only set domClient if the chain is not Prime.
+	if nodeCtx != common.PRIME_CTX {
+		go func() {
+			sl.domClient = makeDomClient(domClientUrl, logger)
+		}()
+	}
+
+	return sl, nil
+}
+
+func newSliceCommon(db ethdb.Database, config *Config, txConfig *TxPoolConfig, txLookupLimit *uint64, isLocalBlock func(block *types.Header) bool, chainConfig *params.ChainConfig, slicesRunning []common.Location, domClientUrl string, subClientUrls []string, engine consensus.Engine, cacheConfig *CacheConfig, indexerConfig *IndexerConfig, vmConfig vm.Config, genesis *Genesis, nodeCtx int, logger *log.Logger) (*Slice, error) {
 	sl := &Slice{
 		config:         chainConfig,
 		engine:         engine,
@@ -124,13 +141,6 @@ func NewSlice(db ethdb.Database, config *Config, txConfig *TxPoolConfig, txLooku
 		}()
 	}
 
-	// only set domClient if the chain is not Prime.
-	if nodeCtx != common.PRIME_CTX {
-		go func() {
-			sl.domClient = makeDomClient(domClientUrl, sl.logger)
-		}()
-	}
-
 	if err := sl.init(genesis); err != nil {
 		return nil, err
 	}
@@ -139,6 +149,24 @@ func NewSlice(db ethdb.Database, config *Config, txConfig *TxPoolConfig, txLooku
 
 	if nodeCtx == common.ZONE_CTX && sl.ProcessingState() {
 		go sl.asyncPendingHeaderLoop()
+	}
+
+	return sl, nil
+}
+
+func NewFakeSlice(db ethdb.Database, config *Config, txConfig *TxPoolConfig, txLookupLimit *uint64, isLocalBlock func(block *types.Header) bool, chainConfig *params.ChainConfig, slicesRunning []common.Location, domClientUrl string, subClientUrls []string, engine consensus.Engine, cacheConfig *CacheConfig, indexerConfig *IndexerConfig, vmConfig vm.Config, genesis *Genesis, logger *log.Logger) (*Slice, error) {
+	nodeCtx := chainConfig.Location.Context()
+	sl, err := newSliceCommon(db, config, txConfig, txLookupLimit, isLocalBlock, chainConfig, slicesRunning, domClientUrl, subClientUrls, engine, cacheConfig, indexerConfig, vmConfig, genesis, nodeCtx, logger)
+
+	if err != nil {
+		return nil, err
+	}
+
+	// only set domClient if the chain is not Prime.
+	if nodeCtx != common.PRIME_CTX {
+		go func() {
+			sl.domClient = quaiclient.NewClient(&quaiclient.TestRpcClient{})
+		}()
 	}
 
 	return sl, nil
@@ -307,15 +335,8 @@ func (sl *Slice) Append(header *types.Header, domPendingHeader *types.Header, do
 
 	var time8, time9 common.PrettyDuration
 	var bestPh types.PendingHeader
-	var exist bool
 	if nodeCtx == common.ZONE_CTX {
-		bestPh, exist = sl.readPhCache(sl.bestPhKey)
-		if !exist {
-			sl.WriteBestPhKey(sl.config.GenesisHash)
-			sl.writePhCache(block.Hash(), pendingHeaderWithTermini)
-			bestPh = types.EmptyPendingHeader()
-			sl.logger.WithField("key", sl.bestPhKey).Warn("BestPh Key does not exist")
-		}
+		bestPh, _ = sl.readPhCache(sl.bestPhKey)
 
 		time8 = common.PrettyDuration(time.Since(start))
 

@@ -23,11 +23,13 @@ import (
 	"github.com/dominant-strategies/go-quai/common"
 	"github.com/dominant-strategies/go-quai/consensus"
 	"github.com/dominant-strategies/go-quai/consensus/misc"
+	"github.com/dominant-strategies/go-quai/core/rawdb"
 	"github.com/dominant-strategies/go-quai/core/state"
 	"github.com/dominant-strategies/go-quai/core/types"
 	"github.com/dominant-strategies/go-quai/core/vm"
 	"github.com/dominant-strategies/go-quai/ethdb"
 	"github.com/dominant-strategies/go-quai/params"
+	"github.com/dominant-strategies/go-quai/trie"
 )
 
 // BlockGen creates blocks for testing.
@@ -215,6 +217,7 @@ func GenerateChain(config *params.ChainConfig, parent *types.Block, engine conse
 	chainreader := &fakeChainReader{config: config}
 	genblock := func(i int, parent *types.Block, statedb *state.StateDB) (*types.Block, types.Receipts) {
 		b := &BlockGen{i: i, chain: blocks, parent: parent, statedb: statedb, config: config, engine: engine}
+		b.subManifest = types.BlockManifest{parent.Hash()}
 		b.header = makeHeader(chainreader, parent, statedb, b.engine)
 
 		// Execute any user modifications to the block
@@ -250,6 +253,7 @@ func GenerateChain(config *params.ChainConfig, parent *types.Block, engine conse
 			panic(err)
 		}
 		block, receipt := genblock(i, parent, statedb)
+		rawdb.WriteBlock(db, block, config.Location.Context())
 		blocks[i] = block
 		receipts[i] = receipt
 		parent = block
@@ -264,14 +268,8 @@ func makeHeader(chain consensus.ChainReader, parent *types.Block, state *state.S
 	} else {
 		time = parent.Time() + 10 // block time is fixed at 10 seconds
 	}
-	nodeCtx := chain.Config().Location.Context()
-
-	// Temporary header values just to calc difficulty
-	diffheader := types.EmptyHeader()
-	diffheader.SetDifficulty(parent.Difficulty(nodeCtx))
-	diffheader.SetNumber(parent.Number(nodeCtx), nodeCtx)
-	diffheader.SetTime(time - 10)
-	diffheader.SetUncleHash(parent.UncleHash())
+	nodeLoc := chain.Config().Location
+	nodeCtx := nodeLoc.Context()
 
 	// Make new header
 	header := types.EmptyHeader()
@@ -279,11 +277,17 @@ func makeHeader(chain consensus.ChainReader, parent *types.Block, state *state.S
 	header.SetEVMRoot(state.IntermediateRoot(true))
 	header.SetParentHash(parent.Hash(), nodeCtx)
 	header.SetCoinbase(parent.Coinbase())
-	header.SetDifficulty(engine.CalcDifficulty(chain, diffheader))
+	header.SetDifficulty(engine.CalcDifficulty(chain, parent.Header()))
 	header.SetGasLimit(parent.GasLimit())
 	header.SetNumber(new(big.Int).Add(parent.Number(nodeCtx), common.Big1), nodeCtx)
 	header.SetTime(time)
 	header.SetBaseFee(misc.CalcBaseFee(chain.Config(), parent.Header()))
+
+	header.SetLocation(nodeLoc)
+
+	manifest := types.BlockManifest{parent.Hash()}
+	header.SetManifestHash(types.DeriveSha(manifest, trie.NewStackTrie(nil)), nodeCtx)
+
 	return header
 }
 

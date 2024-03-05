@@ -100,7 +100,7 @@ type rpcBlock struct {
 	Transactions    []rpcTransaction    `json:"transactions"`
 	UncleHashes     []common.Hash       `json:"uncles"`
 	ExtTransactions []rpcTransaction    `json:"extTransactions"`
-	SubManifest     types.BlockManifest `json:"manifest"`
+	SubManifest     types.BlockManifest `json:"subManifest"`
 }
 
 func (ec *Client) getBlock(ctx context.Context, method string, args ...interface{}) (*types.Block, error) {
