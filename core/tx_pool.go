@@ -141,9 +141,9 @@ const (
 // blockChain provides the state of blockchain and current gas limit to do
 // some pre checks in tx pool and event subscribers.
 type blockChain interface {
-	CurrentBlock() *types.Block
+	CurrentBlock() *types.WorkObject
 	CurrentStateHeader() *types.Header
-	GetBlock(hash common.Hash, number uint64) *types.Block
+	GetBlock(hash common.Hash, number uint64) *types.WorkObject
 	StateAt(root common.Hash, utxoRoot common.Hash) (*state.StateDB, error)
 	FetchUtxosMain(view *types.UtxoViewpoint, outpoints []types.OutPoint) error
 	SubscribeChainHeadEvent(ch chan<- ChainHeadEvent) event.Subscription
@@ -418,9 +418,9 @@ func (pool *TxPool) loop() {
 		select {
 		// Handle ChainHeadEvent
 		case ev := <-pool.chainHeadCh:
-			if ev.Block != nil {
-				pool.requestReset(head.Header(), ev.Block.Header())
-				head = ev.Block
+			if ev.WorkObject != nil {
+				pool.requestReset(head.Header(), ev.WorkObject.Header())
+				head = ev.WorkObject
 			}
 
 		// System shutdown.

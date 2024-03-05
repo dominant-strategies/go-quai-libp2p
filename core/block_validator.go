@@ -52,7 +52,7 @@ func NewBlockValidator(config *params.ChainConfig, headerChain *HeaderChain, eng
 // ValidateBody validates the given block's uncles and verifies the block
 // header's transaction and uncle roots. The headers are assumed to be already
 // validated at this point.
-func (v *BlockValidator) ValidateBody(block *types.Block) error {
+func (v *BlockValidator) ValidateBody(block *types.WorkObject) error {
 	nodeCtx := v.config.Location.Context()
 	// Check whether the block's known, and if not, that it's linkable
 	if nodeCtx == common.ZONE_CTX && v.hc.ProcessingState() {
@@ -101,7 +101,7 @@ func (v *BlockValidator) ValidateBody(block *types.Block) error {
 // transition, such as amount of used gas, the receipt roots and the state root
 // itself. ValidateState returns a database batch if the validation was a success
 // otherwise nil and an error is returned.
-func (v *BlockValidator) ValidateState(block *types.Block, statedb *state.StateDB, receipts types.Receipts, usedGas uint64) error {
+func (v *BlockValidator) ValidateState(block *types.WorkObject, statedb *state.StateDB, receipts types.Receipts, usedGas uint64) error {
 	start := time.Now()
 	header := types.CopyHeader(block.Header())
 	time1 := common.PrettyDuration(time.Since(start))

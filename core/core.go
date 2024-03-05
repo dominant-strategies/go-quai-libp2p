@@ -123,7 +123,7 @@ func NewCore(db ethdb.Database, config *Config, isLocalBlock func(block *types.H
 // caching any pending blocks which cannot yet be appended. InsertChain return
 // the number of blocks which were successfully consumed (either appended, or
 // cached), and an error.
-func (c *Core) InsertChain(blocks types.Blocks) (int, error) {
+func (c *Core) InsertChain(blocks types.WorkObjects) (int, error) {
 	nodeLocation := c.NodeLocation()
 	nodeCtx := c.NodeCtx()
 	for idx, block := range blocks {
@@ -323,7 +323,7 @@ func (c *Core) serviceBlocks(hashNumberList []types.HashAndNumber) {
 					}
 				}
 				c.addToQueueIfNotAppended(parentBlock)
-				_, err = c.InsertChain([]*types.Block{block})
+				_, err = c.InsertChain([]*types.WorkObject{block})
 				if err != nil && err.Error() == ErrPendingBlock.Error() {
 					// Best check here would be to check the first hash in each Fork, until we do that
 					// checking the first item in the sorted hashNumberList will do
@@ -385,7 +385,7 @@ func (c *Core) RequestDomToAppendOrFetch(hash common.Hash, entropy *big.Int, ord
 }
 
 // addToQueueIfNotAppended checks if block is appended and if its not adds the block to appendqueue
-func (c *Core) addToQueueIfNotAppended(block *types.Block) {
+func (c *Core) addToQueueIfNotAppended(block *types.WorkObject) {
 	// Check if the hash is in the blockchain, otherwise add it to the append queue
 	if c.GetHeaderByHash(block.Hash()) == nil {
 		c.addToAppendQueue(block)
@@ -434,7 +434,7 @@ func (c *Core) SyncTargetEntropy() (*big.Int, *big.Int) {
 }
 
 // addToAppendQueue adds a block to the append queue
-func (c *Core) addToAppendQueue(block *types.Block) error {
+func (c *Core) addToAppendQueue(block *types.WorkObject) error {
 	nodeCtx := c.NodeLocation().Context()
 	_, order, err := c.engine.CalcOrder(block.Header())
 	if err != nil {
@@ -447,7 +447,7 @@ func (c *Core) addToAppendQueue(block *types.Block) error {
 }
 
 // removeFromAppendQueue removes a block from the append queue
-func (c *Core) removeFromAppendQueue(block *types.Block) {
+func (c *Core) removeFromAppendQueue(block *types.WorkObject) {
 	c.appendQueue.Remove(block.Hash())
 }
 
@@ -546,7 +546,7 @@ func (c *Core) SubscribeMissingBlockEvent(ch chan<- types.BlockRequest) event.Su
 
 // InsertChainWithoutSealVerification works exactly the same
 // except for seal verification, seal verification is omitted
-func (c *Core) InsertChainWithoutSealVerification(block *types.Block) (int, error) {
+func (c *Core) InsertChainWithoutSealVerification(block *types.WorkObject) (int, error) {
 	return 0, nil
 }
 
@@ -584,7 +584,7 @@ func (c *Core) Stop() {
 //---------------//
 
 // WriteBlock write the block to the bodydb database
-func (c *Core) WriteBlock(block *types.Block) {
+func (c *Core) WriteBlock(block *types.WorkObject) {
 	c.writeBlockLock.Lock()
 	defer c.writeBlockLock.Unlock()
 	nodeCtx := c.NodeCtx()
@@ -607,7 +607,7 @@ func (c *Core) WriteBlock(block *types.Block) {
 			parentHeader := c.GetHeader(block.ParentHash(nodeCtx), block.NumberU64(nodeCtx)-1)
 			if parentHeader != nil {
 				c.sl.WriteBlock(block)
-				c.InsertChain([]*types.Block{block})
+				c.InsertChain([]*types.WorkObject{block})
 			}
 			c.addToAppendQueue(block)
 			// If a dom block comes in and we havent appended it yet
@@ -682,8 +682,8 @@ func (c *Core) DownloadBlocksInManifest(blockHash common.Hash, manifest types.Bl
 }
 
 // ConstructLocalBlock takes a header and construct the Block locally
-func (c *Core) ConstructLocalMinedBlock(header *types.Header) (*types.Block, error) {
-	return c.sl.ConstructLocalMinedBlock(header)
+func (c *Core) ConstructLocalMinedBlock(woHeader *types.WorkObjectHeader) (*types.WorkObject, error) {
+	return c.sl.ConstructLocalMinedBlock(woHeader)
 }
 
 func (c *Core) SubRelayPendingHeader(slPendingHeader types.PendingHeader, newEntropy *big.Int, location common.Location, subReorg bool, order int) {
@@ -772,17 +772,17 @@ func (c *Core) GetSlicesRunning() []common.Location {
 
 // GetBlock retrieves a block from the database by hash and number,
 // caching it if found.
-func (c *Core) GetBlock(hash common.Hash, number uint64) *types.Block {
+func (c *Core) GetBlock(hash common.Hash, number uint64) *types.WorkObject {
 	return c.sl.hc.GetBlock(hash, number)
 }
 
 // GetBlockByHash retrieves a block from the database by hash, caching it if found.
-func (c *Core) GetBlockByHash(hash common.Hash) *types.Block {
+func (c *Core) GetBlockByHash(hash common.Hash) *types.WorkObject {
 	return c.sl.hc.GetBlockByHash(hash)
 }
 
 // GetBlockOrCandidateByHash retrieves a block from the database by hash, caching it if found.
-func (c *Core) GetBlockOrCandidateByHash(hash common.Hash) *types.Block {
+func (c *Core) GetBlockOrCandidateByHash(hash common.Hash) *types.WorkObject {
 	return c.sl.hc.GetBlockOrCandidateByHash(hash)
 }
 
@@ -794,25 +794,25 @@ func (c *Core) GetHeaderByNumber(number uint64) *types.Header {
 
 // GetBlockByNumber retrieves a block from the database by number, caching it
 // (associated with its hash) if found.
-func (c *Core) GetBlockByNumber(number uint64) *types.Block {
+func (c *Core) GetBlockByNumber(number uint64) *types.WorkObject {
 	return c.sl.hc.GetBlockByNumber(number)
 }
 
 // GetBlocksFromHash returns the block corresponding to hash and up to n-1 ancestors.
 // [deprecated by eth/62]
-func (c *Core) GetBlocksFromHash(hash common.Hash, n int) []*types.Block {
+func (c *Core) GetBlocksFromHash(hash common.Hash, n int) []*types.WorkObject {
 	return c.sl.hc.GetBlocksFromHash(hash, n)
 }
 
 // GetUnclesInChain retrieves all the uncles from a given block backwards until
 // a specific distance is reached.
-func (c *Core) GetUnclesInChain(block *types.Block, length int) []*types.Header {
+func (c *Core) GetUnclesInChain(block *types.WorkObject, length int) []*types.Header {
 	return c.sl.hc.GetUnclesInChain(block, length)
 }
 
 // GetGasUsedInChain retrieves all the gas used from a given block backwards until
 // a specific distance is reached.
-func (c *Core) GetGasUsedInChain(block *types.Block, length int) int64 {
+func (c *Core) GetGasUsedInChain(block *types.WorkObject, length int) int64 {
 	return c.sl.hc.GetGasUsedInChain(block, length)
 }
 
@@ -823,7 +823,7 @@ func (c *Core) CalculateBaseFee(header *types.Header) *big.Int {
 }
 
 // CurrentBlock returns the block for the current header.
-func (c *Core) CurrentBlock() *types.Block {
+func (c *Core) CurrentBlock() *types.WorkObject {
 	return c.sl.hc.CurrentBlock()
 }
 
@@ -899,7 +899,7 @@ func (c *Core) GetAncestor(hash common.Hash, number, ancestor uint64, maxNonCano
 }
 
 // Genesis retrieves the chain's genesis block.
-func (c *Core) Genesis() *types.Block {
+func (c *Core) Genesis() *types.WorkObject {
 	return c.GetBlockByHash(c.sl.hc.genesisHeader.Hash())
 }
 
@@ -1026,7 +1026,7 @@ func (c *Core) StopMining() {
 }
 
 // Pending returns the currently pending block and associated state.
-func (c *Core) Pending() *types.Block {
+func (c *Core) Pending() *types.WorkObject {
 	return c.sl.miner.Pending()
 }
 
@@ -1035,12 +1035,12 @@ func (c *Core) Pending() *types.Block {
 // Note, to access both the pending block and the pending state
 // simultaneously, please use Pending(), as the pending state can
 // change between multiple method calls
-func (c *Core) PendingBlock() *types.Block {
+func (c *Core) PendingBlock() *types.WorkObject {
 	return c.sl.miner.PendingBlock()
 }
 
 // PendingBlockAndReceipts returns the currently pending block and corresponding receipts.
-func (c *Core) PendingBlockAndReceipts() (*types.Block, types.Receipts) {
+func (c *Core) PendingBlockAndReceipts() (*types.WorkObject, types.Receipts) {
 	return c.sl.miner.PendingBlockAndReceipts()
 }
 
@@ -1114,11 +1114,11 @@ func (c *Core) StateCache() state.Database {
 func (c *Core) ContractCodeWithPrefix(hash common.Hash) ([]byte, error) {
 	return c.sl.hc.bc.processor.ContractCodeWithPrefix(hash)
 }
-func (c *Core) StateAtBlock(block *types.Block, reexec uint64, base *state.StateDB, checkLive bool) (statedb *state.StateDB, err error) {
+func (c *Core) StateAtBlock(block *types.WorkObject, reexec uint64, base *state.StateDB, checkLive bool) (statedb *state.StateDB, err error) {
 	return c.sl.hc.bc.processor.StateAtBlock(block, reexec, base, checkLive)
 }
 
-func (c *Core) StateAtTransaction(block *types.Block, txIndex int, reexec uint64) (Message, vm.BlockContext, *state.StateDB, error) {
+func (c *Core) StateAtTransaction(block *types.WorkObject, txIndex int, reexec uint64) (Message, vm.BlockContext, *state.StateDB, error) {
 	return c.sl.hc.bc.processor.StateAtTransaction(block, txIndex, reexec)
 }
 

@@ -9,13 +9,13 @@ import (
 type NewTxsEvent struct{ Txs []*types.Transaction }
 
 // NewMinedBlockEvent is posted when a block has been imported.
-type NewMinedBlockEvent struct{ Block *types.Block }
+type NewMinedBlockEvent struct{ Block *types.WorkObject }
 
 // RemovedLogsEvent is posted when a reorg happens
 type RemovedLogsEvent struct{ Logs []*types.Log }
 
 type ChainEvent struct {
-	Block *types.Block
+	Block *types.WorkObject
 	Hash  common.Hash
 	Logs  []*types.Log
 }

@@ -35,6 +35,8 @@ type WorkObjectBody struct {
 	manifest        BlockManifest
 }
 
+type WorkObjects []*WorkObject
+
 func (wo *WorkObject) Header() *Header {
 	return wo.woBody.header
 }
@@ -79,8 +81,8 @@ func (wo *WorkObject) Manifest() BlockManifest {
 	return wo.woBody.manifest
 }
 
-func (wo *WorkObject) ParentHash() common.Hash {
-	return wo.woHeader.parentHash
+func (wo *WorkObject) ParentHash(nodeCtx int) common.Hash {
+	return wo.woBody.header.parentHash[nodeCtx]
 }
 
 func (wo *WorkObject) Number(nodeCtx int) *big.Int {
@@ -113,6 +115,14 @@ func (wo *WorkObject) Location() common.Location {
 
 func (wo *WorkObject) EVMRoot() common.Hash {
 	return wo.woBody.header.EVMRoot()
+}
+
+func (wo *WorkObject) SubManifest() BlockManifest {
+	return wo.woBody.manifest
+}
+
+func (wo *WorkObject) ParentEntropy(nodeCtx int) *big.Int {
+	return wo.woBody.header.ParentEntropy(nodeCtx)
 }
 
 func (wo *WorkObject) SetTx(tx Transaction) {
@@ -202,6 +212,8 @@ func NewWorkObject(woHeader *WorkObjectHeader, woBody *WorkObjectBody, tx Transa
 		tx:       tx,
 	}
 }
+
+func NewWorkObjectWithHeader()
 
 func (wo *WorkObject) CopyWorkObject() *WorkObject {
 	return &WorkObject{

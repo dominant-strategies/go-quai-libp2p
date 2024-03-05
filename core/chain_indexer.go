@@ -200,7 +200,7 @@ func (c *ChainIndexer) eventLoop(currentHeader *types.Header, events chan ChainH
 				errc <- nil
 				return
 			}
-			header := ev.Block.Header()
+			header := ev.WorkObject.Header()
 			if header.ParentHash(nodeCtx) != prevHash {
 				// Reorg to the common ancestor if needed (might not exist in light sync mode, skip reorg then)
 				// TODO: This seems a bit brittle, can we detect this case explicitly?

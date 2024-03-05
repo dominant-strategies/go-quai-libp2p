@@ -171,7 +171,7 @@ func (blake3pow *Blake3pow) verifyHeaderWorker(chain consensus.ChainHeaderReader
 
 // VerifyUncles verifies that the given block's uncles conform to the consensus
 // rules of the stock Quai blake3pow engine.
-func (blake3pow *Blake3pow) VerifyUncles(chain consensus.ChainReader, block *types.Block) error {
+func (blake3pow *Blake3pow) VerifyUncles(chain consensus.ChainReader, block *types.WorkObject) error {
 	nodeCtx := blake3pow.config.NodeLocation.Context()
 	// If we're running a full engine faking, accept any input as valid
 	if blake3pow.config.PowMode == ModeFullFake {
@@ -197,7 +197,7 @@ func (blake3pow *Blake3pow) VerifyUncles(chain consensus.ChainReader, block *typ
 		// If the ancestor doesn't have any uncles, we don't have to iterate them
 		if ancestorHeader.UncleHash() != types.EmptyUncleHash {
 			// Need to add those uncles to the banned list too
-			ancestor := chain.GetBlock(parent, number)
+			ancestor := chain.GetWorkObject(parent, number)
 			if ancestor == nil {
 				break
 			}
@@ -226,7 +226,7 @@ func (blake3pow *Blake3pow) VerifyUncles(chain consensus.ChainReader, block *typ
 		if ancestors[uncle.ParentHash(nodeCtx)] == nil || uncle.ParentHash(nodeCtx) == block.ParentHash(nodeCtx) {
 			return errDanglingUncle
 		}
-		if err := blake3pow.verifyHeader(chain, uncle, ancestors[uncle.ParentHash(nodeCtx)], true, time.Now().Unix()); err != nil {
+		if err := blake3pow.verifyHeader(chain, uncle.Header(), ancestors[uncle.ParentHash(nodeCtx)], true, time.Now().Unix()); err != nil {
 			return err
 		}
 	}
@@ -234,7 +234,7 @@ func (blake3pow *Blake3pow) VerifyUncles(chain consensus.ChainReader, block *typ
 }
 
 // verifyHeader checks whether a header conforms to the consensus rules
-func (blake3pow *Blake3pow) verifyHeader(chain consensus.ChainHeaderReader, header, parent *types.Header, uncle bool, unixNow int64) error {
+func (blake3pow *Blake3pow) verifyHeader(chain consensus.ChainHeaderReader, header, parent *types.Header, uncle bool, unixNow int64) error { //TODO: mmtx add hash validation check for header in woHeader
 	nodeCtx := blake3pow.config.NodeLocation.Context()
 	// Ensure that the header's extra-data section is of a reasonable size
 	if uint64(len(header.Extra())) > params.MaximumExtraDataSize {

@@ -1223,7 +1223,7 @@ func (sl *Slice) init(genesis *Genesis) error {
 // constructLocalBlock takes a header and construct the Block locally by getting the body
 // from the candidate body db. This method is used when peers give the block as a placeholder
 // for the body.
-func (sl *Slice) ConstructLocalBlock(header *types.Header) (*types.Block, error) {
+func (sl *Slice) ConstructLocalBlock(header *types.Header) (*types.WorkObject, error) {
 	pendingBlockBody := rawdb.ReadBody(sl.sliceDb, header.Hash(), header.NumberU64(sl.NodeCtx()), sl.NodeLocation())
 	if pendingBlockBody == nil {
 		return nil, ErrBodyNotFound
@@ -1257,7 +1257,7 @@ func (sl *Slice) ConstructLocalBlock(header *types.Header) (*types.Block, error)
 // constructLocalMinedBlock takes a header and construct the Block locally by getting the block
 // body from the workers pendingBlockBodyCache. This method is used when the miner sends in the
 // header.
-func (sl *Slice) ConstructLocalMinedBlock(woHeader *types.WorkObjectHeader) (*types.Block, error) {
+func (sl *Slice) ConstructLocalMinedBlock(woHeader *types.WorkObjectHeader) (*types.WorkObject, error) {
 	nodeCtx := sl.NodeLocation().Context()
 	var pendingBlockBody *types.Body
 	if nodeCtx == common.ZONE_CTX {

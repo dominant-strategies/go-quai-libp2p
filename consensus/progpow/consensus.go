@@ -173,7 +173,7 @@ func (progpow *Progpow) verifyHeaderWorker(chain consensus.ChainHeaderReader, he
 
 // VerifyUncles verifies that the given block's uncles conform to the consensus
 // rules of the stock Quai progpow engine.
-func (progpow *Progpow) VerifyUncles(chain consensus.ChainReader, block *types.Block) error {
+func (progpow *Progpow) VerifyUncles(chain consensus.ChainReader, block *types.WorkObject) error {
 	nodeCtx := progpow.NodeLocation().Context()
 	// If we're running a full engine faking, accept any input as valid
 	if progpow.config.PowMode == ModeFullFake {
@@ -199,7 +199,7 @@ func (progpow *Progpow) VerifyUncles(chain consensus.ChainReader, block *types.B
 		// If the ancestor doesn't have any uncles, we don't have to iterate them
 		if ancestorHeader.UncleHash() != types.EmptyUncleHash {
 			// Need to add those uncles to the banned list too
-			ancestor := chain.GetBlock(parent, number)
+			ancestor := chain.GetWorkObject(parent, number)
 			if ancestor == nil {
 				break
 			}
@@ -228,7 +228,7 @@ func (progpow *Progpow) VerifyUncles(chain consensus.ChainReader, block *types.B
 		if ancestors[uncle.ParentHash(nodeCtx)] == nil || uncle.ParentHash(nodeCtx) == block.ParentHash(nodeCtx) {
 			return errDanglingUncle
 		}
-		if err := progpow.verifyHeader(chain, uncle, ancestors[uncle.ParentHash(nodeCtx)], true, time.Now().Unix()); err != nil {
+		if err := progpow.verifyHeader(chain, uncle.Header(), ancestors[uncle.ParentHash(nodeCtx)], true, time.Now().Unix()); err != nil {
 			return err
 		}
 	}
@@ -464,11 +464,11 @@ func (progpow *Progpow) Prepare(chain consensus.ChainHeaderReader, header *types
 
 // Finalize implements consensus.Engine, accumulating the block and uncle rewards,
 // setting the final state on the header
-func (progpow *Progpow) Finalize(chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header) {
+func (progpow *Progpow) Finalize(chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.WorkObject) {
+	nodeLocation := progpow.config.NodeLocation
+	nodeCtx := progpow.config.NodeLocation.Context()
 	// Accumulate any block and uncle rewards and commit the final state root
 	accumulateRewards(chain.Config(), state, header, uncles, progpow.logger)
-	nodeLocation := progpow.NodeLocation()
-	nodeCtx := progpow.NodeLocation().Context()
 
 	if nodeCtx == common.ZONE_CTX && header.ParentHash(nodeCtx) == chain.Config().GenesisHash {
 		alloc := core.ReadGenesisAlloc("genallocs/gen_alloc_"+nodeLocation.Name()+".json", progpow.logger)
@@ -494,15 +494,20 @@ func (progpow *Progpow) Finalize(chain consensus.ChainHeaderReader, header *type
 
 // FinalizeAndAssemble implements consensus.Engine, accumulating the block and
 // uncle rewards, setting the final state and assembling the block.
-func (progpow *Progpow) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header, etxs []*types.Transaction, subManifest types.BlockManifest, receipts []*types.Receipt) (*types.Block, error) {
+func (progpow *Progpow) FinalizeAndAssemble(chain consensus.ChainHeaderReader, woHeader *types.WorkObjectHeader, state *state.StateDB, txs []*types.Transaction, uncles []*types.WorkObject, etxs []*types.Transaction, subManifest types.BlockManifest, receipts []*types.Receipt) (*types.WorkObject, error) {
 	nodeCtx := progpow.NodeLocation().Context()
+	header := chain.GetHeaderByHash(woHeader.Hash())
+	if header == nil {
+		return nil, consensus.ErrUnknownAncestor
+	}
 	if nodeCtx == common.ZONE_CTX && chain.ProcessingState() {
 		// Finalize block
 		progpow.Finalize(chain, header, state, txs, uncles)
 	}
 
 	// Header seems complete, assemble into a block and return
-	return types.NewBlock(header, txs, uncles, etxs, subManifest, receipts, trie.NewStackTrie(nil), nodeCtx), nil
+	woBody := types.NewWorkObjectBody(header, txs, etxs, uncles, subManifest, receipts, trie.NewStackTrie(nil), nodeCtx)
+	return types.NewWorkObject(woHeader, woBody, types.Transaction{}), nil
 }
 
 func (progpow *Progpow) NodeLocation() common.Location {
@@ -512,14 +517,17 @@ func (progpow *Progpow) NodeLocation() common.Location {
 // AccumulateRewards credits the coinbase of the given block with the mining
 // reward. The total reward consists of the static block reward and rewards for
 // included uncles. The coinbase of each uncle block is also rewarded.
-func accumulateRewards(config *params.ChainConfig, state *state.StateDB, header *types.Header, uncles []*types.Header, logger *log.Logger) {
+func accumulateRewards(config *params.ChainConfig, state *state.StateDB, header *types.Header, uncles []*types.WorkObject, logger *log.Logger) {
+	nodeCtx := config.Location.Context()
 	// Select the correct block reward based on chain progression
 	blockReward := misc.CalculateReward(header)
-	nodeCtx := config.Location.Context()
 
 	coinbase, err := header.Coinbase().InternalAddress()
 	if err != nil {
-		logger.WithField("hash", header.Hash().String()).Error("Block has out-of-scope coinbase, skipping block reward")
+		logger.WithFields(log.Fields{
+			"Address": header.Coinbase().String(),
+			"Hash":    header.Hash().String(),
+		}).Error("Block has out of scope coinbase, skipping block reward")
 		return
 	}
 
@@ -527,12 +535,15 @@ func accumulateRewards(config *params.ChainConfig, state *state.StateDB, header 
 	reward := new(big.Int).Set(blockReward)
 	r := new(big.Int)
 	for _, uncle := range uncles {
-		coinbase, err := uncle.Coinbase().InternalAddress()
+		coinbase, err := uncle.Header().Coinbase().InternalAddress()
 		if err != nil {
-			logger.WithField("hash", uncle.Hash().String()).Error("Uncle has out-of-scope coinbase, skipping reward")
+			logger.WithFields(log.Fields{
+				"Address": uncle.Header().Coinbase().String(),
+				"Hash":    uncle.Hash().String(),
+			}).Error("Found uncle with out of scope coinbase, skipping reward")
 			continue
 		}
-		r.Add(uncle.Number(nodeCtx), big8)
+		r.Add(uncle.Header().Number(nodeCtx), big8)
 		r.Sub(r, header.Number(nodeCtx))
 		r.Mul(r, blockReward)
 		r.Div(r, big8)

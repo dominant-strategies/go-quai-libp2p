@@ -142,7 +142,7 @@ func (env *environment) discard() {
 type task struct {
 	receipts  []*types.Receipt
 	state     *state.StateDB
-	block     *types.Block
+	block     *types.WorkObject
 	createdAt time.Time
 }
 
@@ -193,7 +193,7 @@ type worker struct {
 
 	// Channels
 	taskCh                         chan *task
-	resultCh                       chan *types.Block
+	resultCh                       chan *types.WorkObject
 	exitCh                         chan struct{}
 	resubmitIntervalCh             chan time.Duration
 	resubmitAdjustCh               chan *intervalAdjust
@@ -218,7 +218,7 @@ type worker struct {
 	pendingBlockBody *lru.Cache
 
 	snapshotMu    sync.RWMutex // The lock used to protect the snapshots below
-	snapshotBlock *types.Block
+	snapshotBlock *types.WorkObject
 
 	headerPrints *expireLru.Cache
 
@@ -280,7 +280,7 @@ func newWorker(config *Config, chainConfig *params.ChainConfig, db ethdb.Databas
 		chainHeadCh:                    make(chan ChainHeadEvent, chainHeadChanSize),
 		chainSideCh:                    make(chan ChainSideEvent, chainSideChanSize),
 		taskCh:                         make(chan *task),
-		resultCh:                       make(chan *types.Block, resultQueueSize),
+		resultCh:                       make(chan *types.WorkObject, resultQueueSize),
 		exitCh:                         make(chan struct{}),
 		interrupt:                      make(chan struct{}),
 		resubmitIntervalCh:             make(chan time.Duration),
@@ -357,7 +357,7 @@ func (w *worker) enablePreseal() {
 }
 
 // pending returns the pending state and corresponding block.
-func (w *worker) pending() *types.Block {
+func (w *worker) pending() *types.WorkObject {
 	// return a snapshot to avoid contention on currentMu mutex
 	w.snapshotMu.RLock()
 	defer w.snapshotMu.RUnlock()
@@ -365,7 +365,7 @@ func (w *worker) pending() *types.Block {
 }
 
 // pendingBlock returns pending block.
-func (w *worker) pendingBlock() *types.Block {
+func (w *worker) pendingBlock() *types.WorkObject {
 	// return a snapshot to avoid contention on currentMu mutex
 	w.snapshotMu.RLock()
 	defer w.snapshotMu.RUnlock()
@@ -373,7 +373,7 @@ func (w *worker) pendingBlock() *types.Block {
 }
 
 // pendingBlockAndReceipts returns pending block and corresponding receipts.
-func (w *worker) pendingBlockAndReceipts() (*types.Block, types.Receipts) {
+func (w *worker) pendingBlockAndReceipts() (*types.WorkObject, types.Receipts) {
 	// return a snapshot to avoid contention on currentMu mutex
 	w.snapshotMu.RLock()
 	defer w.snapshotMu.RUnlock()
@@ -1126,7 +1126,7 @@ func copyReceipts(receipts []*types.Receipt) []*types.Receipt {
 }
 
 // totalFees computes total consumed miner fees in ETH. Block transactions and receipts have to have the same order.
-func totalFees(block *types.Block, receipts []*types.Receipt) *big.Float {
+func totalFees(block *types.WorkObject, receipts []*types.Receipt) *big.Float {
 	feesWei := new(big.Int)
 	for i, tx := range block.QuaiTransactions() {
 		minerFee, _ := tx.EffectiveGasTip(block.BaseFee())

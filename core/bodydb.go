@@ -90,7 +90,7 @@ func NewBodyDb(db ethdb.Database, engine consensus.Engine, hc *HeaderChain, chai
 }
 
 // Append
-func (bc *BodyDb) Append(block *types.Block, newInboundEtxs types.Transactions) ([]*types.Log, error) {
+func (bc *BodyDb) Append(block *types.WorkObject, newInboundEtxs types.Transactions) ([]*types.Log, error) {
 	bc.chainmu.Lock()
 	defer bc.chainmu.Unlock()
 
@@ -134,10 +134,10 @@ func (bc *BodyDb) ProcessingState() bool {
 }
 
 // WriteBlock write the block to the bodydb database
-func (bc *BodyDb) WriteBlock(block *types.Block) {
+func (bc *BodyDb) WriteBlock(block *types.WorkObject) {
 	// add the block to the cache as well
 	bc.blockCache.Add(block.Hash(), block)
-	rawdb.WriteBlock(bc.db, block, bc.NodeCtx())
+	rawdb.WriteWorkObject(bc.db, block.Hash(), *block)
 }
 
 // HasBlock checks if a block is fully present in the database or not.
@@ -155,16 +155,16 @@ func (bc *BodyDb) Engine() consensus.Engine {
 
 // GetBlock retrieves a block from the database by hash and number,
 // caching it if found.
-func (bc *BodyDb) GetBlock(hash common.Hash, number uint64) *types.Block {
+func (bc *BodyDb) GetBlock(hash common.Hash, number uint64) *types.WorkObject {
 	termini := rawdb.ReadTermini(bc.db, hash)
 	if termini == nil {
 		return nil
 	}
 	// Short circuit if the block's already in the cache, retrieve otherwise
 	if block, ok := bc.blockCache.Get(hash); ok {
-		return block.(*types.Block)
+		return block.(*types.WorkObject)
 	}
-	block := rawdb.ReadBlock(bc.db, hash, number, bc.NodeLocation())
+	block := rawdb.ReadWorkObject(bc.db, hash, bc.NodeLocation())
 	if block == nil {
 		return nil
 	}
@@ -199,8 +199,8 @@ func (bc *BodyDb) GetUtxo(hash common.Hash, index uint32) *types.UtxoEntry {
 
 // GetBlockOrCandidate retrieves any known block from the database by hash and number,
 // caching it if found.
-func (bc *BodyDb) GetBlockOrCandidate(hash common.Hash, number uint64) *types.Block {
-	block := rawdb.ReadBlock(bc.db, hash, number, bc.NodeLocation())
+func (bc *BodyDb) GetBlockOrCandidate(hash common.Hash, number uint64) *types.WorkObject {
+	block := rawdb.ReadWorkObject(bc.db, hash, bc.NodeLocation())
 	if block == nil {
 		return nil
 	}
