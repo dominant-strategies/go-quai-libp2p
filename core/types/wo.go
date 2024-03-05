@@ -2,7 +2,10 @@ package types
 
 import (
 	"errors"
+	"io"
 	"math/big"
+	"sync/atomic"
+	"time"
 
 	"github.com/dominant-strategies/go-quai/common"
 	"github.com/dominant-strategies/go-quai/common/hexutil"
@@ -15,6 +18,15 @@ type WorkObject struct {
 	woHeader WorkObjectHeader
 	woBody   *WorkObjectBody
 	tx       Transaction
+
+	// caches
+	size       atomic.Value
+	appendTime atomic.Value
+
+	// These fields are used to track
+	// inter-peer block relay.
+	ReceivedAt   time.Time
+	ReceivedFrom interface{}
 }
 
 type WorkObjectHeader struct {
@@ -173,6 +185,61 @@ func (wo *WorkObject) SetHeaderHash(headerHash common.Hash) {
 	wo.woHeader.headerHash = headerHash
 }
 
+func (wo *WorkObject) SetLocation(location common.Location) {
+	wo.woBody.header.SetLocation(location)
+}
+
+func (wo *WorkObject) SetEVMRoot(root common.Hash) {
+	wo.woBody.header.SetEVMRoot(root)
+}
+
+func (wo *WorkObject) SetSubManifest(manifest BlockManifest) {
+	wo.woBody.manifest = manifest
+}
+
+func (wo *WorkObject) SetParentEntropy(entropy *big.Int, nodeCtx int) {
+	wo.woBody.header.SetParentEntropy(entropy, nodeCtx)
+}
+
+func (wo *WorkObject) SetEtxRollupHash(hash common.Hash) {
+	wo.woBody.header.SetEtxRollupHash(hash)
+}
+
+func (wo *WorkObject) SetBaseFee(fee *big.Int) {
+	wo.woBody.header.SetBaseFee(fee)
+}
+
+func (wo *WorkObject) SetGasUsed(gasUsed uint64) {
+	wo.woBody.header.SetGasUsed(gasUsed)
+}
+
+func (wo *WorkObject) SetGasLimit(gasLimit uint64) {
+	wo.woBody.header.SetGasLimit(gasLimit)
+}
+
+func (wo *WorkObject) SetTime(time uint64) {
+	wo.woBody.header.SetTime(time)
+}
+
+func (wo *WorkObject) SetCoinbase(coinbase common.Address) {
+	wo.woBody.header.SetCoinbase(coinbase)
+}
+
+// GetAppendTime returns the appendTime of the block
+// The appendTime is computed on the first call and cached thereafter.
+func (wo *WorkObject) GetAppendTime() time.Duration {
+	if appendTime := wo.appendTime.Load(); appendTime != nil {
+		if val, ok := appendTime.(time.Duration); ok {
+			return val
+		}
+	}
+	return -1
+}
+
+func (wo *WorkObject) SetAppendTime(appendTime time.Duration) {
+	wo.appendTime.Store(appendTime)
+}
+
 func (wo *WorkObject) QiTransactions() []*Transaction {
 	return wo.woBody.QiTransactions()
 }
@@ -205,6 +272,14 @@ func (wo *WorkObject) Coinbase() common.Address {
 	return wo.woBody.header.Coinbase()
 }
 
+func (wo *WorkObject) EtxRollupHash() common.Hash {
+	return wo.woBody.header.EtxRollupHash()
+}
+
+func (wo *WorkObject) EncodeRLP(w io.Writer) error {
+	return wo.woBody.header.EncodeRLP(w)
+}
+
 func NewWorkObject(woHeader *WorkObjectHeader, woBody *WorkObjectBody, tx Transaction) *WorkObject {
 	return &WorkObject{
 		woHeader: *woHeader,
@@ -213,7 +288,11 @@ func NewWorkObject(woHeader *WorkObjectHeader, woBody *WorkObjectBody, tx Transa
 	}
 }
 
-func NewWorkObjectWithHeader()
+func NewWorkObjectWithHeader(header *Header, tx Transaction) *WorkObject {
+	woHeader := NewWorkObjectHeader(header.Hash(), header.ParentHash(common.ZONE_CTX), header.Number(common.ZONE_CTX), header.Difficulty(), header.TxHash(), header.Nonce(), header.Location())
+	woBody := NewWorkObjectBody(header, nil, nil, nil, nil, nil, nil, 0)
+	return NewWorkObject(woHeader, woBody, tx)
+}
 
 func (wo *WorkObject) CopyWorkObject() *WorkObject {
 	return &WorkObject{

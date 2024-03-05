@@ -139,7 +139,7 @@ func (miner *Miner) SetRecommitInterval(interval time.Duration) {
 }
 
 // Pending returns the currently pending block and associated state.
-func (miner *Miner) Pending() *types.Block {
+func (miner *Miner) Pending() *types.WorkObject {
 	return miner.worker.pending()
 }
 
@@ -148,12 +148,12 @@ func (miner *Miner) Pending() *types.Block {
 // Note, to access both the pending block and the pending state
 // simultaneously, please use Pending(), as the pending state can
 // change between multiple method calls
-func (miner *Miner) PendingBlock() *types.Block {
+func (miner *Miner) PendingBlock() *types.WorkObject {
 	return miner.worker.pendingBlock()
 }
 
 // PendingBlockAndReceipts returns the currently pending block and corresponding receipts.
-func (miner *Miner) PendingBlockAndReceipts() (*types.Block, types.Receipts) {
+func (miner *Miner) PendingBlockAndReceipts() (*types.WorkObject, types.Receipts) {
 	return miner.worker.pendingBlockAndReceipts()
 }
 

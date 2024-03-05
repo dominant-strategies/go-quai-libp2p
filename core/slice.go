@@ -383,7 +383,7 @@ func (sl *Slice) Append(header *types.Header, domPendingHeader *types.Header, do
 			"location":   block.Location(),
 			"parentHash": block.ParentHash(nodeCtx),
 		}).Debug("Found uncle")
-		sl.hc.chainSideFeed.Send(ChainSideEvent{Blocks: []*types.Block{block}, ResetUncles: false})
+		sl.hc.chainSideFeed.Send(ChainSideEvent{Blocks: []*types.WorkObject{block}, ResetUncles: false})
 	}
 
 	if subReorg {
@@ -461,7 +461,7 @@ func (sl *Slice) ProcessingState() bool {
 }
 
 // relayPh sends pendingHeaderWithTermini to subordinates
-func (sl *Slice) relayPh(block *types.Block, pendingHeaderWithTermini types.PendingHeader, domOrigin bool, location common.Location, subReorg bool) {
+func (sl *Slice) relayPh(block *types.WorkObject, pendingHeaderWithTermini types.PendingHeader, domOrigin bool, location common.Location, subReorg bool) {
 	nodeCtx := sl.NodeCtx()
 
 	if nodeCtx == common.ZONE_CTX && sl.ProcessingState() {
@@ -641,7 +641,7 @@ func (sl *Slice) WriteBestPhKey(hash common.Hash) {
 }
 
 // Generate a slice pending header
-func (sl *Slice) generateSlicePendingHeader(block *types.Block, newTermini types.Termini, domPendingHeader *types.Header, domOrigin bool, subReorg bool, fill bool) (types.PendingHeader, error) {
+func (sl *Slice) generateSlicePendingHeader(block *types.WorkObject, newTermini types.Termini, domPendingHeader *types.Header, domOrigin bool, subReorg bool, fill bool) (types.PendingHeader, error) {
 	nodeCtx := sl.NodeLocation().Context()
 	var localPendingHeader *types.Header
 	var err error
@@ -678,7 +678,7 @@ func (sl *Slice) generateSlicePendingHeader(block *types.Block, newTermini types
 }
 
 // CollectNewlyConfirmedEtxs collects all newly confirmed ETXs since the last coincident with the given location
-func (sl *Slice) CollectNewlyConfirmedEtxs(block *types.Block, location common.Location) (types.Transactions, types.Transactions, error) {
+func (sl *Slice) CollectNewlyConfirmedEtxs(block *types.WorkObject, location common.Location) (types.Transactions, types.Transactions, error) {
 	nodeLocation := sl.NodeLocation()
 	nodeCtx := sl.NodeCtx()
 	// Collect rollup of ETXs from the subordinate node's manifest
@@ -1246,7 +1246,7 @@ func (sl *Slice) ConstructLocalBlock(header *types.Header) (*types.WorkObject, e
 	for i, blockHash := range pendingBlockBody.SubManifest {
 		subManifest[i] = blockHash
 	}
-	block := types.NewBlockWithHeader(header).WithBody(txs, uncles, etxs, subManifest)
+	block := types.NewWorkObjectWithHeader(header, types.Transaction{})
 	if err := sl.validator.ValidateBody(block); err != nil {
 		return block, err
 	} else {
@@ -1259,34 +1259,39 @@ func (sl *Slice) ConstructLocalBlock(header *types.Header) (*types.WorkObject, e
 // header.
 func (sl *Slice) ConstructLocalMinedBlock(woHeader *types.WorkObjectHeader) (*types.WorkObject, error) {
 	nodeCtx := sl.NodeLocation().Context()
-	var pendingBlockBody *types.Body
+	var pendingBlockBody *types.WorkObjectBody
 	if nodeCtx == common.ZONE_CTX {
 		pendingBlockBody = sl.GetPendingBlockBody(woHeader)
 		if pendingBlockBody == nil {
 			return nil, ErrBodyNotFound
 		}
 	} else {
-		pendingBlockBody = &types.Body{}
+		pendingBlockBody = &types.WorkObjectBody{}
 	}
 	// Load uncles because they are not included in the block response.
-	txs := make([]*types.Transaction, len(pendingBlockBody.Transactions))
-	for i, tx := range pendingBlockBody.Transactions {
+	txs := make([]*types.Transaction, len(pendingBlockBody.Transactions()))
+	for i, tx := range pendingBlockBody.Transactions() {
 		txs[i] = tx
 	}
-	uncles := make([]*types.Header, len(pendingBlockBody.Uncles))
-	for i, uncle := range pendingBlockBody.Uncles {
+	uncles := make(types.WorkObjects, len(pendingBlockBody.Uncles()))
+	for i, uncle := range pendingBlockBody.Uncles() {
 		uncles[i] = uncle
 		sl.logger.WithField("hash", uncle.Hash()).Debug("Pending Block uncle")
 	}
-	etxs := make([]*types.Transaction, len(pendingBlockBody.ExtTransactions))
-	for i, etx := range pendingBlockBody.ExtTransactions {
+	etxs := make(types.Transactions, len(pendingBlockBody.ExtTransactions()))
+	for i, etx := range pendingBlockBody.ExtTransactions() {
 		etxs[i] = etx
 	}
-	subManifest := make(types.BlockManifest, len(pendingBlockBody.SubManifest))
-	for i, blockHash := range pendingBlockBody.SubManifest {
+	subManifest := make(types.BlockManifest, len(pendingBlockBody.Manifest()))
+	for i, blockHash := range pendingBlockBody.Manifest() {
 		subManifest[i] = blockHash
 	}
-	block := types.NewBlockWithHeader(header).WithBody(txs, uncles, etxs, subManifest)
+	pendingBlockBody.SetTransactions(txs)
+	pendingBlockBody.SetUncles(uncles)
+	pendingBlockBody.SetExtTransactions(etxs)
+	pendingBlockBody.SetManifest(subManifest)
+	block := types.NewWorkObject(woHeader, pendingBlockBody, types.Transaction{})
+
 	if err := sl.validator.ValidateBody(block); err != nil {
 		return block, err
 	} else {
@@ -1360,7 +1365,7 @@ func (sl *Slice) NewGenesisPendingHeader(domPendingHeader *types.Header) {
 	}
 
 	if nodeCtx == common.PRIME_CTX {
-		domPendingHeader = types.CopyHeader(localPendingHeader)
+		domPendingHeader = types.CopyWorkObject(localPendingHeader)
 	} else {
 		domPendingHeader = sl.combinePendingHeader(localPendingHeader, domPendingHeader, nodeCtx, true)
 		domPendingHeader.SetLocation(sl.NodeLocation())

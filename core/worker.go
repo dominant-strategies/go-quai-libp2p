@@ -509,7 +509,7 @@ func (w *worker) asyncStateLoop() {
 }
 
 // GeneratePendingBlock generates pending block given a commited block.
-func (w *worker) GeneratePendingHeader(wo *types.WorkObject, fill bool) (*types.WorkObject, error) {
+func (w *worker) GeneratePendingHeader(wo *types.WorkObject, fill bool) (*types.WorkObjectHeader, error) {
 	nodeCtx := w.hc.NodeCtx()
 
 	w.interruptAsyncPhGen()

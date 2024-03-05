@@ -332,7 +332,7 @@ func (f *freezer) freeze(db ethdb.KeyValueStore, nodeCtx int) {
 			}
 		}
 		// Retrieve the freezing threshold.
-		hash := ReadHeadWorkObjectHash(nfdb)
+		hash := ReadHeadBlockHash(nfdb)
 		if hash == (common.Hash{}) {
 			f.logger.Debug("Current full block hash unavailable") // new chain, empty database
 			backoff = true

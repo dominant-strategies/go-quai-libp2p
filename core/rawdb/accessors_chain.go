@@ -172,8 +172,8 @@ func WriteHeadHeaderHash(db ethdb.KeyValueWriter, hash common.Hash) {
 	}
 }
 
-// ReadHeadWorkObjectHash retrieves the hash of the current canonical head block.
-func ReadHeadWorkObjectHash(db ethdb.KeyValueReader) common.Hash {
+// ReadHeadBlockHash retrieves the hash of the current canonical head block.
+func ReadHeadBlockHash(db ethdb.KeyValueReader) common.Hash {
 	data, _ := db.Get(headWorkObjectKey)
 	if len(data) == 0 {
 		return common.Hash{}
@@ -181,8 +181,8 @@ func ReadHeadWorkObjectHash(db ethdb.KeyValueReader) common.Hash {
 	return common.BytesToHash(data)
 }
 
-// WriteHeadWorkObjectHash stores the head block's hash.
-func WriteHeadWorkObjectHash(db ethdb.KeyValueWriter, hash common.Hash) {
+// WriteHeadBlockHash stores the head block's hash.
+func WriteHeadBlockHash(db ethdb.KeyValueWriter, hash common.Hash) {
 	if err := db.Put(headWorkObjectKey, hash.Bytes()); err != nil {
 		log.Global.WithField("err", err).Fatal("Failed to store last block's hash")
 	}
@@ -1237,9 +1237,9 @@ func ReadHeadHeader(db ethdb.Reader) *types.Header {
 	return ReadHeader(db, headHeaderHash, *headHeaderNumber)
 }
 
-// ReadHeadWorkObject returns the current canonical head block.
-func ReadHeadWorkObject(db ethdb.Reader, location common.Location) *types.WorkObject {
-	headWorkObjectHash := ReadHeadWorkObjectHash(db)
+// ReadHeadBlock returns the current canonical head block.
+func ReadHeadBlock(db ethdb.Reader, location common.Location) *types.WorkObject {
+	headWorkObjectHash := ReadHeadBlockHash(db)
 	if headWorkObjectHash == (common.Hash{}) {
 		return nil
 	}

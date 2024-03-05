@@ -806,7 +806,7 @@ func (c *Core) GetBlocksFromHash(hash common.Hash, n int) []*types.WorkObject {
 
 // GetUnclesInChain retrieves all the uncles from a given block backwards until
 // a specific distance is reached.
-func (c *Core) GetUnclesInChain(block *types.WorkObject, length int) []*types.Header {
+func (c *Core) GetUnclesInChain(block *types.WorkObject, length int) types.WorkObjects {
 	return c.sl.hc.GetUnclesInChain(block, length)
 }
 

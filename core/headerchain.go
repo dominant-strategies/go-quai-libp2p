@@ -148,7 +148,7 @@ func NewHeaderChain(db ethdb.Database, engine consensus.Engine, pEtxsRollupFetch
 
 // CollectSubRollup collects the rollup of ETXs emitted from the subordinate
 // chain in the slice which emitted the given block.
-func (hc *HeaderChain) CollectSubRollup(b *types.Block) (types.Transactions, error) {
+func (hc *HeaderChain) CollectSubRollup(b *types.WorkObject) (types.Transactions, error) {
 	nodeCtx := hc.NodeCtx()
 	subRollup := types.Transactions{}
 	if nodeCtx < common.ZONE_CTX {
@@ -243,7 +243,7 @@ func (hc *HeaderChain) CollectEtxRollup(b *types.WorkObject) (types.Transactions
 	return hc.collectInclusiveEtxRollup(parent)
 }
 
-func (hc *HeaderChain) collectInclusiveEtxRollup(b *types.Block) (types.Transactions, error) {
+func (hc *HeaderChain) collectInclusiveEtxRollup(b *types.WorkObject) (types.Transactions, error) {
 	// Initialize the rollup with ETXs emitted by this block
 	newEtxs := b.ExtTransactions()
 	// Terminate the search if we reached genesis
@@ -308,7 +308,7 @@ func (hc *HeaderChain) ProcessingState() bool {
 }
 
 // Append
-func (hc *HeaderChain) AppendBlock(block *types.Block, newInboundEtxs types.Transactions) error {
+func (hc *HeaderChain) AppendBlock(block *types.WorkObject, newInboundEtxs types.Transactions) error {
 	blockappend := time.Now()
 	// Append block else revert header append
 	logs, err := hc.bc.Append(block, newInboundEtxs)
@@ -397,7 +397,7 @@ func (hc *HeaderChain) SetCurrentHeader(head *types.Header) error {
 		// Every Block that got removed from the canonical hash db is sent in the side feed to be
 		// recorded as uncles
 		go func() {
-			var blocks []*types.Block
+			var blocks []*types.WorkObject
 			for i := len(prevHashStack) - 1; i >= 0; i-- {
 				block := hc.bc.GetBlock(prevHashStack[i].Hash(), prevHashStack[i].NumberU64(hc.NodeCtx()))
 				if block != nil {
@@ -511,7 +511,7 @@ func (hc *HeaderChain) setCurrentUTXOSet(head *types.Header) error {
 		return errors.New("Could not find block during reorg")
 	}
 	// Accumulate the new chain from the new head to the common header
-	var newChain []*types.Block
+	var newChain []*types.WorkObject
 	for {
 		if newBlock.Hash() == commonHeader.Hash() {
 			break
@@ -825,7 +825,7 @@ func (hc *HeaderChain) GetAncestor(hash common.Hash, number, ancestor uint64, ma
 	return hash, number
 }
 
-func (hc *HeaderChain) WriteBlock(block *types.Block) {
+func (hc *HeaderChain) WriteBlock(block *types.WorkObject) {
 	hc.bc.WriteBlock(block)
 }
 
@@ -955,7 +955,7 @@ func (hc *HeaderChain) CurrentStateHeader() *types.Header {
 }
 
 // CurrentBlock returns the block for the current header.
-func (hc *HeaderChain) CurrentBlock() *types.Block {
+func (hc *HeaderChain) CurrentBlock() *types.WorkObject {
 	return hc.GetBlockOrCandidateByHash(hc.CurrentHeader().Hash())
 }
 
@@ -969,7 +969,7 @@ func (hc *HeaderChain) Config() *params.ChainConfig { return hc.config }
 
 // GetBlock implements consensus.ChainReader, and returns nil for every input as
 // a header chain does not have blocks available for retrieval.
-func (hc *HeaderChain) GetBlock(hash common.Hash, number uint64) *types.Block {
+func (hc *HeaderChain) GetBlock(hash common.Hash, number uint64) *types.WorkObject {
 	return hc.bc.GetBlock(hash, number)
 }
 
@@ -1003,8 +1003,8 @@ func (hc *HeaderChain) GasLimit() uint64 {
 
 // GetUnclesInChain retrieves all the uncles from a given block backwards until
 // a specific distance is reached.
-func (hc *HeaderChain) GetUnclesInChain(block *types.Block, length int) []*types.Header {
-	uncles := []*types.Header{}
+func (hc *HeaderChain) GetUnclesInChain(block *types.WorkObject, length int) types.WorkObjects {
+	uncles := types.WorkObjects{}
 	for i := 0; block != nil && i < length; i++ {
 		uncles = append(uncles, block.Uncles()...)
 		block = hc.GetBlock(block.ParentHash(hc.NodeCtx()), block.NumberU64(hc.NodeCtx())-1)
@@ -1014,7 +1014,7 @@ func (hc *HeaderChain) GetUnclesInChain(block *types.Block, length int) []*types
 
 // GetGasUsedInChain retrieves all the gas used from a given block backwards until
 // a specific distance is reached.
-func (hc *HeaderChain) GetGasUsedInChain(block *types.Block, length int) int64 {
+func (hc *HeaderChain) GetGasUsedInChain(block *types.WorkObject, length int) int64 {
 	gasUsed := 0
 	for i := 0; block != nil && i < length; i++ {
 		gasUsed += int(block.GasUsed())
@@ -1057,17 +1057,17 @@ func (hc *HeaderChain) ExportN(w io.Writer, first uint64, last uint64) error {
 }
 
 // GetBlockFromCacheOrDb looks up the body cache first and then checks the db
-func (hc *HeaderChain) GetBlockFromCacheOrDb(hash common.Hash, number uint64) *types.Block {
+func (hc *HeaderChain) GetBlockFromCacheOrDb(hash common.Hash, number uint64) *types.WorkObject {
 	// Short circuit if the block's already in the cache, retrieve otherwise
 	if cached, ok := hc.bc.blockCache.Get(hash); ok {
-		block := cached.(*types.Block)
+		block := cached.(*types.WorkObject)
 		return block
 	}
 	return hc.GetBlock(hash, number)
 }
 
 // GetBlockByHash retrieves a block from the database by hash, caching it if found.
-func (hc *HeaderChain) GetBlockByHash(hash common.Hash) *types.Block {
+func (hc *HeaderChain) GetBlockByHash(hash common.Hash) *types.WorkObject {
 	number := hc.GetBlockNumber(hash)
 	if number == nil {
 		return nil
@@ -1075,12 +1075,12 @@ func (hc *HeaderChain) GetBlockByHash(hash common.Hash) *types.Block {
 	return hc.GetBlock(hash, *number)
 }
 
-func (hc *HeaderChain) GetBlockOrCandidate(hash common.Hash, number uint64) *types.Block {
+func (hc *HeaderChain) GetBlockOrCandidate(hash common.Hash, number uint64) *types.WorkObject {
 	return hc.bc.GetBlockOrCandidate(hash, number)
 }
 
 // GetBlockOrCandidateByHash retrieves any block from the database by hash, caching it if found.
-func (hc *HeaderChain) GetBlockOrCandidateByHash(hash common.Hash) *types.Block {
+func (hc *HeaderChain) GetBlockOrCandidateByHash(hash common.Hash) *types.WorkObject {
 	number := hc.GetBlockNumber(hash)
 	if number == nil {
 		return nil
@@ -1090,7 +1090,7 @@ func (hc *HeaderChain) GetBlockOrCandidateByHash(hash common.Hash) *types.Block 
 
 // GetBlockByNumber retrieves a block from the database by number, caching it
 // (associated with its hash) if found.
-func (hc *HeaderChain) GetBlockByNumber(number uint64) *types.Block {
+func (hc *HeaderChain) GetBlockByNumber(number uint64) *types.WorkObject {
 	hash := rawdb.ReadCanonicalHash(hc.headerDb, number)
 	if hash == (common.Hash{}) {
 		return nil
@@ -1141,7 +1141,7 @@ func (hc *HeaderChain) GetBodyRLP(hash common.Hash) rlp.RawValue {
 
 // GetBlocksFromHash returns the block corresponding to hash and up to n-1 ancestors.
 // [deprecated by eth/62]
-func (hc *HeaderChain) GetBlocksFromHash(hash common.Hash, n int) (blocks []*types.Block) {
+func (hc *HeaderChain) GetBlocksFromHash(hash common.Hash, n int) (blocks types.WorkObjects) {
 	number := hc.GetBlockNumber(hash)
 	if number == nil {
 		return nil
@@ -1243,7 +1243,7 @@ func (hc *HeaderChain) VerifyUTXOsForTx(tx *types.Transaction) error {
 // database as needed.  In particular, referenced entries that are earlier in
 // the block are added to the view and entries that are already in the view are
 // not modified.
-func (hc *HeaderChain) fetchInputUtxos(view *types.UtxoViewpoint, block *types.Block) error {
+func (hc *HeaderChain) fetchInputUtxos(view *types.UtxoViewpoint, block *types.WorkObject) error {
 	// Build a map of in-flight transactions because some of the inputs in
 	// this block could be referencing other transactions earlier in this
 	// block which are not yet in the chain.
@@ -1297,7 +1297,7 @@ func (hc *HeaderChain) fetchInputUtxos(view *types.UtxoViewpoint, block *types.B
 	return hc.FetchUtxosMain(view, needed)
 }
 
-func (hc *HeaderChain) verifyInputUtxos(view *types.UtxoViewpoint, block *types.Block, signer types.Signer) (*big.Int, error) { // should this be used instead of Verify
+func (hc *HeaderChain) verifyInputUtxos(view *types.UtxoViewpoint, block *types.WorkObject, signer types.Signer) (*big.Int, error) { // should this be used instead of Verify
 
 	transactions := block.QiTransactions()
 	if types.IsCoinBaseTx(transactions[0]) {
@@ -1487,7 +1487,7 @@ func createCoinbaseTxWithFees(header *types.Header, fees *big.Int, state *state.
 // created by the passed block, restoring all utxos the transactions spent by
 // using the provided spent txo information, and setting the best hash for the
 // view to the block before the passed block.
-func (hc *HeaderChain) disconnectTransactions(view *types.UtxoViewpoint, block *types.Block, stxos []types.SpentTxOut) error {
+func (hc *HeaderChain) disconnectTransactions(view *types.UtxoViewpoint, block *types.WorkObject, stxos []types.SpentTxOut) error {
 	// Sanity check the correct number of stxos are provided.
 	if len(stxos) != types.CountSpentOutputs(block) {
 		return fmt.Errorf("disconnectTransactions: wrong number of")

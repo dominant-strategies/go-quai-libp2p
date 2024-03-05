@@ -21,8 +21,8 @@ type ChainEvent struct {
 }
 
 type ChainSideEvent struct {
-	WorkObjects []*types.WorkObject
+	Blocks      []*types.WorkObject
 	ResetUncles bool
 }
 
-type ChainHeadEvent struct{ WorkObject *types.WorkObject }
+type ChainHeadEvent struct{ Block *types.WorkObject }
