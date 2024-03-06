@@ -1055,7 +1055,7 @@ func (c *Core) SubscribePendingLogs(ch chan<- []*types.Log) event.Subscription {
 }
 
 // SubscribePendingBlock starts delivering the pending block to the given channel.
-func (c *Core) SubscribePendingHeader(ch chan<- *types.Header) event.Subscription {
+func (c *Core) SubscribePendingHeader(ch chan<- *types.WorkObject) event.Subscription {
 	return c.sl.miner.SubscribePendingHeader(ch)
 }
 

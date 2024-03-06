@@ -558,7 +558,7 @@ func (w *worker) GeneratePendingHeader(wo *types.WorkObject, fill bool) (*types.
 				"average": common.PrettyDuration(w.fillTransactionsRollingAverage.Average()),
 			}).Info("Filled and sorted pending transactions")
 		}
-		coinbaseTx, err := createCoinbaseTxWithFees(work.wo.Header(), work.utxoFees, work.state)
+		coinbaseTx, err := createCoinbaseTxWithFees(work.wo, work.utxoFees, work.state)
 		if err != nil {
 			return nil, err
 		}
@@ -904,7 +904,7 @@ func (w *worker) prepareWork(genParams *generateParams, wo *types.WorkObject) (*
 
 	// Only calculate entropy if the parent is not the genesis block
 	if parent.Header().Hash() != w.hc.config.GenesisHash {
-		_, order, err := w.engine.CalcOrder(parent.Header())
+		_, order, err := w.engine.CalcOrder(parent)
 		if err != nil {
 			return nil, err
 		}
@@ -913,16 +913,16 @@ func (w *worker) prepareWork(genParams *generateParams, wo *types.WorkObject) (*
 			if order < nodeCtx {
 				header.SetParentDeltaS(big.NewInt(0), nodeCtx)
 			} else {
-				header.SetParentDeltaS(w.engine.DeltaLogS(parent.Header()), nodeCtx)
+				header.SetParentDeltaS(w.engine.DeltaLogS(parent), nodeCtx)
 			}
 		}
-		header.SetParentEntropy(w.engine.TotalLogS(parent.Header()), nodeCtx)
+		header.SetParentEntropy(w.engine.TotalLogS(parent), nodeCtx)
 	}
 
 	// Only zone should calculate state
 	if nodeCtx == common.ZONE_CTX && w.hc.ProcessingState() {
 		header.SetExtra(w.extra)
-		header.SetBaseFee(misc.CalcBaseFee(w.chainConfig, parent.Header()))
+		header.SetBaseFee(misc.CalcBaseFee(w.chainConfig, parent))
 		if w.isRunning() {
 			if w.coinbase.Equal(common.Zero) {
 				w.logger.Error("Refusing to mine without etherbase")
@@ -932,7 +932,7 @@ func (w *worker) prepareWork(genParams *generateParams, wo *types.WorkObject) (*
 		}
 
 		// Run the consensus preparation with the default or customized consensus engine.
-		if err := w.engine.Prepare(w.hc, header, wo.Header()); err != nil {
+		if err := w.engine.Prepare(w.hc, header, wo); err != nil {
 			w.logger.WithField("err", err).Error("Failed to prepare header for sealing")
 			return nil, err
 		}
@@ -1023,12 +1023,12 @@ func (w *worker) fillTransactions(interrupt *int32, env *environment, wo *types.
 // into the given sealing block. The transaction selection and ordering strategy can
 // be customized with the plugin in the future.
 func (w *worker) adjustGasLimit(interrupt *int32, env *environment, parent *types.WorkObject) {
-	env.wo.Header().SetGasLimit(CalcGasLimit(parent.Header(), w.config.GasCeil))
+	env.wo.Header().SetGasLimit(CalcGasLimit(parent, w.config.GasCeil))
 }
 
 // ComputeManifestHash given a header computes the manifest hash for the header
 // and stores it in the database
-func (w *worker) ComputeManifestHash(header *types.Header) common.Hash {
+func (w *worker) ComputeManifestHash(header *types.WorkObject) common.Hash {
 	manifest := rawdb.ReadManifest(w.workerDb, header.Hash())
 	if manifest == nil {
 		nodeCtx := w.hc.NodeCtx()
@@ -1058,14 +1058,14 @@ func (w *worker) FinalizeAssemble(chain consensus.ChainHeaderReader, woHeader *t
 		return nil, err
 	}
 
-	manifestHash := w.ComputeManifestHash(parent.Header())
+	manifestHash := w.ComputeManifestHash(parent)
 
 	if w.hc.ProcessingState() {
 		wo.Header().SetManifestHash(manifestHash, nodeCtx)
 		if nodeCtx == common.ZONE_CTX {
 			// Compute and set etx rollup hash
 			var etxRollup types.Transactions
-			if w.engine.IsDomCoincident(w.hc, parent.Header()) {
+			if w.engine.IsDomCoincident(w.hc, parent) {
 				etxRollup = parent.ExtTransactions()
 			} else {
 				etxRollup, err = w.hc.CollectEtxRollup(parent)
@@ -1102,7 +1102,7 @@ func (w *worker) AddPendingWorkObjectBody(wb *types.WorkObjectBody) {
 // GetPendingBlockBody gets the block body associated with the given header.
 func (w *worker) GetPendingBlockBody(woHeader *types.WorkObjectHeader) *types.WorkObjectBody {
 	header := w.hc.GetHeaderByHash(woHeader.HeaderHash())
-	key := w.getPendingWorkObjectBodyKey(header)
+	key := w.getPendingWorkObjectBodyKey(header.Header())
 	body, ok := w.pendingBlockBody.Get(key)
 	if ok {
 		return body.(*types.WorkObjectBody)

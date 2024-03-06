@@ -301,7 +301,7 @@ type TxPool struct {
 }
 
 type txpoolResetRequest struct {
-	oldHead, newHead *types.Header
+	oldHead, newHead *types.WorkObject
 }
 
 type newSender struct {
@@ -370,7 +370,7 @@ func NewTxPool(config TxPoolConfig, chainconfig *params.ChainConfig, chain block
 		pool.locals.add(addr)
 	}
 	pool.priced = newTxPricedList(pool.all)
-	pool.reset(nil, chain.CurrentBlock().Header())
+	pool.reset(nil, chain.CurrentBlock())
 
 	// Start the reorg loop early so it can handle requests generated during journal loading.
 	pool.wg.Add(1)
@@ -418,9 +418,9 @@ func (pool *TxPool) loop() {
 		select {
 		// Handle ChainHeadEvent
 		case ev := <-pool.chainHeadCh:
-			if ev.WorkObject != nil {
-				pool.requestReset(head.Header(), ev.WorkObject.Header())
-				head = ev.WorkObject
+			if ev.Block != nil {
+				pool.requestReset(head, ev.Block)
+				head = ev.Block
 			}
 
 		// System shutdown.
@@ -1287,7 +1287,7 @@ func (pool *TxPool) removeTx(hash common.Hash, outofbound bool) {
 
 // requestReset requests a pool reset to the new head block.
 // The returned channel is closed when the reset has occurred.
-func (pool *TxPool) requestReset(oldHead *types.Header, newHead *types.Header) chan struct{} {
+func (pool *TxPool) requestReset(oldHead *types.WorkObject, newHead *types.WorkObject) chan struct{} {
 	select {
 	case pool.reqResetCh <- &txpoolResetRequest{oldHead, newHead}:
 		return <-pool.reorgDoneCh
@@ -1498,7 +1498,7 @@ func (pool *TxPool) runReorg(done chan struct{}, cancel chan struct{}, reset *tx
 // reset retrieves the current state of the blockchain and ensures the content
 // of the transaction pool is valid with regard to the chain state.
 // The mempool lock must be held by the caller.
-func (pool *TxPool) reset(oldHead, newHead *types.Header) {
+func (pool *TxPool) reset(oldHead, newHead *types.WorkObject) {
 	nodeCtx := pool.chainconfig.Location.Context()
 	var start time.Time
 	if pool.reOrgCounter == c_reorgCounterThreshold {
@@ -1597,7 +1597,7 @@ func (pool *TxPool) reset(oldHead, newHead *types.Header) {
 	}
 	// Initialize the internal state to the current head
 	if newHead == nil {
-		newHead = pool.chain.CurrentBlock().Header() // Special case during testing
+		newHead = pool.chain.CurrentBlock() // Special case during testing
 	}
 	statedb, err := pool.chain.StateAt(newHead.EVMRoot(), newHead.UTXORoot())
 	if err != nil {

@@ -48,7 +48,7 @@ type Config struct {
 
 // OracleBackend includes all necessary background APIs for oracle.
 type OracleBackend interface {
-	HeaderByNumber(ctx context.Context, number rpc.BlockNumber) (*types.Header, error)
+	HeaderByNumber(ctx context.Context, number rpc.BlockNumber) (*types.WorkObject, error)
 	BlockByNumber(ctx context.Context, number rpc.BlockNumber) (*types.WorkObject, error)
 	GetReceipts(ctx context.Context, hash common.Hash) (types.Receipts, error)
 	PendingBlockAndReceipts() (*types.WorkObject, types.Receipts)

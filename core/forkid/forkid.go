@@ -52,7 +52,7 @@ type Blockchain interface {
 	Genesis() *types.WorkObject
 
 	// CurrentHeader retrieves the current head header of the canonical chain.
-	CurrentHeader() *types.Header
+	CurrentHeader() *types.WorkObject
 }
 
 // ID is a fork identifier

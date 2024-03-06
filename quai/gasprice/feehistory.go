@@ -50,7 +50,6 @@ const (
 type blockFees struct {
 	// set by the caller
 	blockNumber uint64
-	header      *types.Header
 	block       *types.WorkObject // only set if reward percentiles are requested
 	receipts    types.Receipts
 	// filled by processBlock
@@ -82,13 +81,13 @@ func (s sortGasAndReward) Less(i, j int) bool {
 // fills in the rest of the fields.
 func (oracle *Oracle) processBlock(bf *blockFees, percentiles []float64) {
 	chainconfig := oracle.backend.ChainConfig()
-	if bf.baseFee = bf.header.BaseFee(); bf.baseFee == nil {
+	if bf.baseFee = bf.block.BaseFee(); bf.baseFee == nil {
 		bf.baseFee = new(big.Int)
 	}
 
-	bf.nextBaseFee = misc.CalcBaseFee(chainconfig, bf.header)
+	bf.nextBaseFee = misc.CalcBaseFee(chainconfig, bf.block)
 
-	bf.gasUsedRatio = float64(bf.header.GasUsed()) / float64(bf.header.GasLimit())
+	bf.gasUsedRatio = float64(bf.block.GasUsed()) / float64(bf.block.GasLimit())
 	if len(percentiles) == 0 {
 		// rewards were not requested, return null
 		return
@@ -260,13 +259,13 @@ func (oracle *Oracle) FeeHistory(ctx context.Context, blocks int, unresolvedLast
 							fees.receipts, fees.err = oracle.backend.GetReceipts(ctx, fees.block.Hash())
 						}
 					} else {
-						fees.header, fees.err = oracle.backend.HeaderByNumber(ctx, rpc.BlockNumber(blockNumber))
+						fees.block, fees.err = oracle.backend.HeaderByNumber(ctx, rpc.BlockNumber(blockNumber))
 					}
 				}
 				if fees.block != nil {
-					fees.header = fees.block.Header()
+					fees.block = fees.block.CopyWorkObject()
 				}
-				if fees.header != nil {
+				if fees.block != nil {
 					oracle.processBlock(fees, rewardPercentiles)
 				}
 				// send to results even if empty to guarantee that blocks items are sent in total
@@ -286,7 +285,7 @@ func (oracle *Oracle) FeeHistory(ctx context.Context, blocks int, unresolvedLast
 			return common.Big0, nil, nil, nil, fees.err
 		}
 		i := int(fees.blockNumber - oldestBlock)
-		if fees.header != nil {
+		if fees.block != nil {
 			reward[i], baseFee[i], baseFee[i+1], gasUsedRatio[i] = fees.reward, fees.baseFee, fees.nextBaseFee, fees.gasUsedRatio
 		} else {
 			// getting no block and no error means we are requesting into the future (might happen because of a reorg)

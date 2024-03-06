@@ -794,7 +794,7 @@ func (p *StateProcessor) StateAtBlock(block *types.WorkObject, reexec uint64, ba
 }
 
 // stateAtTransaction returns the execution environment of a certain transaction.
-func (p *StateProcessor) StateAtTransaction(block *types.Block, txIndex int, reexec uint64) (Message, vm.BlockContext, *state.StateDB, error) {
+func (p *StateProcessor) StateAtTransaction(block *types.WorkObject, txIndex int, reexec uint64) (Message, vm.BlockContext, *state.StateDB, error) {
 	nodeCtx := p.hc.NodeCtx()
 	// Short circuit if it's genesis block.
 	if block.NumberU64(nodeCtx) == 0 {
@@ -902,7 +902,7 @@ func (p *StateProcessor) FetchUtxosMain(statedb *state.StateDB, view *types.Utxo
 // database as needed.  In particular, referenced entries that are earlier in
 // the block are added to the view and entries that are already in the view are
 // not modified.
-func (p *StateProcessor) FetchInputUtxos(statedb *state.StateDB, view *types.UtxoViewpoint, block *types.Block) error {
+func (p *StateProcessor) FetchInputUtxos(statedb *state.StateDB, view *types.UtxoViewpoint, block *types.WorkObject) error {
 	// Build a map of in-flight transactions because some of the inputs in
 	// this block could be referencing other transactions earlier in this
 	// block which are not yet in the chain.
@@ -954,7 +954,7 @@ func (p *StateProcessor) FetchInputUtxos(statedb *state.StateDB, view *types.Utx
 	return p.FetchUtxosMain(statedb, view, needed)
 }
 
-func (p *StateProcessor) VerifyTransactions(view *types.UtxoViewpoint, block *types.Block, signer types.Signer) (*big.Int, error) {
+func (p *StateProcessor) VerifyTransactions(view *types.UtxoViewpoint, block *types.WorkObject, signer types.Signer) (*big.Int, error) {
 
 	transactions := block.QiTransactions()
 	if types.IsCoinBaseTx(transactions[0]) {

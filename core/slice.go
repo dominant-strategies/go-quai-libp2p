@@ -666,7 +666,7 @@ func (sl *Slice) generateSlicePendingHeader(block *types.WorkObject, newTermini 
 			}
 		}
 
-		manifestHash := sl.miner.worker.ComputeManifestHash(block.Header())
+		manifestHash := sl.miner.worker.ComputeManifestHash(block)
 		localPendingHeader.SetManifestHash(manifestHash, nodeCtx)
 	}
 

@@ -1122,7 +1122,7 @@ func ReadBadWorkObject(db ethdb.Reader, hash common.Hash, location common.Locati
 
 // ReadAllBadWorkObjects retrieves all the bad blocks in the database.
 // All returned blocks are sorted in reverse order by number.
-func ReadAllBadWorkObjects(db ethdb.Reader, location common.Location) []*types.WorkObject {
+func ReadAllBadBlocks(db ethdb.Reader, location common.Location) []*types.WorkObject {
 	blob, err := db.Get(badWorkObjectKey)
 	if err != nil {
 		return nil

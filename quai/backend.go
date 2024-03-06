@@ -228,7 +228,7 @@ func New(stack *node.Node, p2p NetworkingAPI, config *quaiconfig.Config, nodeCtx
 	// Set the p2p Networking API
 	quai.p2p = p2p
 	// Subscribe to the Blocks subscription
-	quai.p2p.Subscribe(config.NodeLocation, &types.Block{})
+	quai.p2p.Subscribe(config.NodeLocation, &types.WorkObject{})
 	quai.p2p.Subscribe(config.NodeLocation, common.Hash{})
 	quai.p2p.Subscribe(config.NodeLocation, &types.Transaction{})
 
@@ -356,7 +356,7 @@ func (s *Quai) isLocalBlock(header *types.Header) bool {
 // shouldPreserve checks whether we should preserve the given block
 // during the chain reorg depending on whether the author of block
 // is a local account.
-func (s *Quai) shouldPreserve(block *types.Block) bool {
+func (s *Quai) shouldPreserve(block *types.WorkObject) bool {
 	return s.isLocalBlock(block.Header())
 }
 

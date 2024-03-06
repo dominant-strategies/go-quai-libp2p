@@ -97,7 +97,7 @@ type appendReturns struct {
 }
 
 // SubscribePendingHeader subscribes to notifications about the current pending block on the node.
-func (ec *Client) SubscribePendingHeader(ctx context.Context, ch chan<- *types.Header) (quai.Subscription, error) {
+func (ec *Client) SubscribePendingHeader(ctx context.Context, ch chan<- *types.WorkObject) (quai.Subscription, error) {
 	return ec.c.QuaiSubscribe(ctx, ch, "pendingHeader")
 }
 

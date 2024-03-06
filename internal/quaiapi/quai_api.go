@@ -234,7 +234,7 @@ func (s *PublicBlockChainQuaiAPI) GetProof(ctx context.Context, address common.A
 func (s *PublicBlockChainQuaiAPI) GetHeaderByNumber(ctx context.Context, number rpc.BlockNumber) (map[string]interface{}, error) {
 	header, err := s.b.HeaderByNumber(ctx, number)
 	if header != nil && err == nil {
-		response := header.RPCMarshalHeader()
+		response := header.RPCMarshalWorkObject()
 		if number == rpc.PendingBlockNumber {
 			// Pending header need to nil out a few fields
 			for _, field := range []string{"hash", "nonce", "miner"} {
@@ -259,7 +259,7 @@ func (s *PublicBlockChainQuaiAPI) GetHeaderHashByNumber(ctx context.Context, num
 func (s *PublicBlockChainQuaiAPI) GetHeaderByHash(ctx context.Context, hash common.Hash) map[string]interface{} {
 	header, _ := s.b.HeaderByHash(ctx, hash)
 	if header != nil {
-		return header.RPCMarshalHeader()
+		return header.RPCMarshalWorkObject()
 	}
 	return nil
 }
@@ -308,7 +308,7 @@ func (s *PublicBlockChainQuaiAPI) GetUncleByBlockNumberAndIndex(ctx context.Cont
 			}).Debug("Requested uncle not found")
 			return nil, nil
 		}
-		block = types.NewBlockWithHeader(uncles[index])
+		block = types.NewWorkObjectWithHeader(uncles[index].Header(), types.Transaction{}) //TODO: mmtx add transaction
 		return s.rpcMarshalBlock(ctx, block, false, false)
 	}
 	return nil, err
@@ -328,7 +328,7 @@ func (s *PublicBlockChainQuaiAPI) GetUncleByBlockHashAndIndex(ctx context.Contex
 			}).Debug("Requested uncle not found")
 			return nil, nil
 		}
-		block = types.NewBlockWithHeader(uncles[index])
+		block = types.NewWorkObjectWithHeader(uncles[index].Header(), types.Transaction{})
 		return s.rpcMarshalBlock(ctx, block, false, false)
 	}
 	pendBlock, _ := s.b.PendingBlockAndReceipts()
@@ -342,7 +342,7 @@ func (s *PublicBlockChainQuaiAPI) GetUncleByBlockHashAndIndex(ctx context.Contex
 			}).Debug("Requested uncle not found in pending block")
 			return nil, nil
 		}
-		block = types.NewBlockWithHeader(uncles[index])
+		block = types.NewWorkObjectWithHeader(uncles[index].Header(), types.Transaction{})
 		return s.rpcMarshalBlock(ctx, block, false, false)
 	}
 	return nil, err
@@ -456,7 +456,7 @@ func (s *PublicBlockChainQuaiAPI) EstimateGas(ctx context.Context, args Transact
 // If txType is set to "true" returns the Quai base fee in units of Wei.
 // If txType is set to "false" returns the Qi base fee in units of Qit.
 func (s *PublicBlockChainQuaiAPI) BaseFee(ctx context.Context, txType bool) (*big.Int, error) {
-	header := s.b.CurrentHeader()
+	header := s.b.CurrentBlock()
 	if header == nil {
 		return nil, errors.New("no header available")
 	}
@@ -477,7 +477,7 @@ func (s *PublicBlockChainQuaiAPI) BaseFee(ctx context.Context, txType bool) (*bi
 // RPCMarshalBlock converts the given block to the RPC output which depends on fullTx. If inclTx is true transactions are
 // returned. When fullTx is true the returned block contains full transaction details, otherwise it will only contain
 // transaction hashes.
-func RPCMarshalBlock(block *types.Block, inclTx bool, fullTx bool, nodeLocation common.Location) (map[string]interface{}, error) {
+func RPCMarshalBlock(block *types.WorkObject, inclTx bool, fullTx bool, nodeLocation common.Location) (map[string]interface{}, error) {
 	fields := block.Header().RPCMarshalHeader()
 	fields["size"] = hexutil.Uint64(block.Size())
 
@@ -546,25 +546,25 @@ func RPCMarshalHash(hash common.Hash) (map[string]interface{}, error) {
 
 // rpcMarshalHeader uses the generalized output filler, then adds the total difficulty field, which requires
 // a `PublicBlockchainQuaiAPI`.
-func (s *PublicBlockChainQuaiAPI) rpcMarshalHeader(ctx context.Context, header *types.Header) map[string]interface{} {
-	fields := header.RPCMarshalHeader()
+func (s *PublicBlockChainQuaiAPI) rpcMarshalHeader(ctx context.Context, header *types.WorkObject) map[string]interface{} {
+	fields := header.RPCMarshalWorkObject()
 	fields["totalEntropy"] = (*hexutil.Big)(s.b.TotalLogS(header))
 	return fields
 }
 
 // rpcMarshalBlock uses the generalized output filler, then adds the total difficulty field, which requires
 // a `PublicBlockchainAPI`.
-func (s *PublicBlockChainQuaiAPI) rpcMarshalBlock(ctx context.Context, b *types.Block, inclTx bool, fullTx bool) (map[string]interface{}, error) {
+func (s *PublicBlockChainQuaiAPI) rpcMarshalBlock(ctx context.Context, b *types.WorkObject, inclTx bool, fullTx bool) (map[string]interface{}, error) {
 	fields, err := RPCMarshalBlock(b, inclTx, fullTx, s.b.NodeLocation())
 	if err != nil {
 		return nil, err
 	}
-	_, order, err := s.b.CalcOrder(b.Header())
+	_, order, err := s.b.CalcOrder(b)
 	if err != nil {
 		return nil, err
 	}
 	fields["order"] = order
-	fields["totalEntropy"] = (*hexutil.Big)(s.b.TotalLogS(b.Header()))
+	fields["totalEntropy"] = (*hexutil.Big)(s.b.TotalLogS(b))
 	return fields, err
 }
 
@@ -593,7 +593,7 @@ func (s *PublicBlockChainQuaiAPI) CreateAccessList(ctx context.Context, args Tra
 	return result, nil
 }
 
-func (s *PublicBlockChainQuaiAPI) fillSubordinateManifest(b *types.Block) (*types.Block, error) {
+func (s *PublicBlockChainQuaiAPI) fillSubordinateManifest(b *types.WorkObject) (*types.WorkObject, error) {
 	nodeCtx := s.b.NodeCtx()
 	if b.ManifestHash(nodeCtx+1) == types.EmptyRootHash {
 		return nil, errors.New("cannot fill empty subordinate manifest")
@@ -622,7 +622,8 @@ func (s *PublicBlockChainQuaiAPI) fillSubordinateManifest(b *types.Block) (*type
 		if subManifest == nil || b.ManifestHash(nodeCtx+1) != types.DeriveSha(subManifest, trie.NewStackTrie(nil)) {
 			return nil, errors.New("reconstructed sub manifest does not match manifest hash")
 		}
-		return types.NewBlockWithHeader(b.Header()).WithBody(b.Transactions(), b.Uncles(), b.ExtTransactions(), subManifest), nil
+		return types.NewWorkObject(b.WorkObjectHeader(), types.NewWorkObjectBody(b.Header(), b.Transactions(), b.ExtTransactions(), b.Uncles(), subManifest, nil, nil, nodeCtx), types.Transaction{}), nil
+		//return types.NewBlockWithHeader(b.Header()).WithBody(b.Transactions(), b.Uncles(), b.ExtTransactions(), subManifest), nil
 	}
 }
 
@@ -665,9 +666,9 @@ func (s *PublicBlockChainQuaiAPI) ReceiveMinedHeader(ctx context.Context, raw js
 }
 
 type tdBlock struct {
-	Header           *types.Header       `json:"header"`
+	Header           *types.WorkObject   `json:"header"`
 	Manifest         types.BlockManifest `json:"manifest"`
-	DomPendingHeader *types.Header       `json:"domPendingHeader"`
+	DomPendingHeader *types.WorkObject   `json:"domPendingHeader"`
 	DomTerminus      common.Hash         `json:"domTerminus"`
 	DomOrigin        bool                `json:"domOrigin"`
 	NewInboundEtxs   types.Transactions  `json:"newInboundEtxs"`
@@ -711,8 +712,8 @@ func (s *PublicBlockChainQuaiAPI) DownloadBlocksInManifest(ctx context.Context, 
 }
 
 type SubRelay struct {
-	Header     *types.Header `json:"header"`
-	Termini    types.Termini `json:"termini"`
+	Header     *types.WorkObject `json:"header"`
+	Termini    types.Termini     `json:"termini"`
 	NewEntropy *big.Int
 	Location   common.Location
 	SubReorg   bool
@@ -730,8 +731,8 @@ func (s *PublicBlockChainQuaiAPI) SubRelayPendingHeader(ctx context.Context, raw
 
 type DomUpdate struct {
 	OldTerminus common.Hash
-	Header      *types.Header `json:"header"`
-	Termini     types.Termini `json:"termini"`
+	Header      *types.WorkObject `json:"header"`
+	Termini     types.Termini     `json:"termini"`
 	Location    common.Location
 }
 
@@ -760,7 +761,7 @@ func (s *PublicBlockChainQuaiAPI) RequestDomToAppendOrFetch(ctx context.Context,
 	s.b.RequestDomToAppendOrFetch(requestDom.Hash, requestDom.Entropy, requestDom.Order)
 }
 func (s *PublicBlockChainQuaiAPI) NewGenesisPendingHeader(ctx context.Context, raw json.RawMessage) {
-	var pendingHeader *types.Header
+	var pendingHeader *types.WorkObject
 	if err := json.Unmarshal(raw, &pendingHeader); err != nil {
 		return
 	}
@@ -825,8 +826,8 @@ func (s *PublicBlockChainQuaiAPI) SendPendingEtxsRollupToDom(ctx context.Context
 }
 
 type GenerateRecoveryPendingHeaderArgs struct {
-	PendingHeader    *types.Header `json:"pendingHeader"`
-	CheckpointHashes types.Termini `json:"checkpointHashes"`
+	PendingHeader    *types.WorkObject `json:"pendingHeader"`
+	CheckpointHashes types.Termini     `json:"checkpointHashes"`
 }
 
 func (s *PublicBlockChainQuaiAPI) GenerateRecoveryPendingHeader(ctx context.Context, raw json.RawMessage) error {
@@ -880,7 +881,7 @@ func (s *PublicBlockChainQuaiAPI) GetPendingEtxsFromSub(ctx context.Context, raw
 }
 
 func (s *PublicBlockChainQuaiAPI) SetSyncTarget(ctx context.Context, raw json.RawMessage) error {
-	var header *types.Header
+	var header *types.WorkObject
 	if err := json.Unmarshal(raw, &header); err != nil {
 		return err
 	}

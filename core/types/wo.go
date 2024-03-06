@@ -345,6 +345,15 @@ func (wo *WorkObject) EncodeRLP(w io.Writer) error {
 	return wo.woBody.header.EncodeRLP(w)
 }
 
+func (wo *WorkObject) Size() common.StorageSize {
+	if size := wo.size.Load(); size != nil {
+		if val, ok := size.(common.StorageSize); ok {
+			return val
+		}
+	}
+	return -1
+}
+
 func NewWorkObject(woHeader *WorkObjectHeader, woBody *WorkObjectBody, tx Transaction) *WorkObject {
 	return &WorkObject{
 		woHeader: *woHeader,

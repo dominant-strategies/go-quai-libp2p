@@ -234,7 +234,7 @@ func (blake3pow *Blake3pow) VerifyUncles(chain consensus.ChainReader, block *typ
 }
 
 // verifyHeader checks whether a header conforms to the consensus rules
-func (blake3pow *Blake3pow) verifyHeader(chain consensus.ChainHeaderReader, header *types.WorkObject, parent *types.WorkObject, uncle bool, unixNow int64) error { //TODO: mmtx add hash validation check for header in woHeader
+func (blake3pow *Blake3pow) verifyHeader(chain consensus.ChainHeaderReader, header, parent *types.WorkObject, uncle bool, unixNow int64) error { //TODO: mmtx add hash validation check for header in woHeader
 	nodeCtx := blake3pow.config.NodeLocation.Context()
 	// Ensure that the header's extra-data section is of a reasonable size
 	if uint64(len(header.Extra())) > params.MaximumExtraDataSize {
@@ -420,7 +420,7 @@ func (blake3pow *Blake3pow) verifySeal(header *types.WorkObject) error {
 
 // Prepare implements consensus.Engine, initializing the difficulty field of a
 // header to conform to the blake3pow protocol. The changes are done inline.
-func (blake3pow *Blake3pow) Prepare(chain consensus.ChainHeaderReader, header *types.Header, parent *types.WorkObject) error {
+func (blake3pow *Blake3pow) Prepare(chain consensus.ChainHeaderReader, header *types.WorkObject, parent *types.WorkObject) error {
 	header.SetDifficulty(blake3pow.CalcDifficulty(chain, parent))
 	return nil
 }
