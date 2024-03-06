@@ -72,7 +72,7 @@ type Core struct {
 
 	procCounter int
 
-	syncTarget *types.Header // sync target header decided based on Best Prime Block as the target to sync to
+	syncTarget *types.WorkObject // sync target header decided based on Best Prime Block as the target to sync to
 
 	normalListBackoff uint64 // normalListBackoff is the multiple on c_normalListProcCounter which delays the proc on normal list
 
@@ -130,7 +130,7 @@ func (c *Core) InsertChain(blocks types.WorkObjects) (int, error) {
 		// Only attempt to append a block, if it is not coincident with our dominant
 		// chain. If it is dom coincident, then the dom chain node in our slice needs
 		// to initiate the append.
-		_, order, err := c.CalcOrder(block.Header())
+		_, order, err := c.CalcOrder(block)
 		if err != nil {
 			return idx, err
 		}
@@ -145,7 +145,7 @@ func (c *Core) InsertChain(blocks types.WorkObjects) (int, error) {
 				}).Info("Already processing block")
 				return idx, errors.New("Already in process of appending this block")
 			}
-			newPendingEtxs, _, _, err := c.sl.Append(block.Header(), types.EmptyHeader(), common.Hash{}, false, nil)
+			newPendingEtxs, _, _, err := c.sl.Append(block, types.EmptyHeader(), common.Hash{}, false, nil)
 			c.processingCache.Remove(block.Hash())
 			if err == nil {
 				// If we have a dom, send the dom any pending ETXs which will become
@@ -303,7 +303,7 @@ func (c *Core) serviceBlocks(hashNumberList []types.HashAndNumber) {
 			parentBlock := c.sl.hc.GetBlockOrCandidate(block.ParentHash(c.NodeCtx()), block.NumberU64(c.NodeCtx())-1)
 			if parentBlock != nil {
 				// If parent header is dom, send a signal to dom to request for the block if it doesnt have it
-				_, parentHeaderOrder, err := c.sl.engine.CalcOrder(parentBlock.Header())
+				_, parentHeaderOrder, err := c.sl.engine.CalcOrder(parentBlock)
 				if err != nil {
 					c.logger.WithFields(log.Fields{
 						"Hash":   parentBlock.Hash(),
@@ -393,7 +393,7 @@ func (c *Core) addToQueueIfNotAppended(block *types.WorkObject) {
 }
 
 // SetSyncTarget sets the sync target entropy based on the prime blocks
-func (c *Core) SetSyncTarget(header *types.Header) {
+func (c *Core) SetSyncTarget(header *types.WorkObject) {
 	if c.sl.subClients == nil || header.Hash() == c.sl.config.GenesisHash {
 		return
 	}
@@ -436,7 +436,7 @@ func (c *Core) SyncTargetEntropy() (*big.Int, *big.Int) {
 // addToAppendQueue adds a block to the append queue
 func (c *Core) addToAppendQueue(block *types.WorkObject) error {
 	nodeCtx := c.NodeLocation().Context()
-	_, order, err := c.engine.CalcOrder(block.Header())
+	_, order, err := c.engine.CalcOrder(block)
 	if err != nil {
 		return err
 	}
@@ -599,7 +599,7 @@ func (c *Core) WriteBlock(block *types.WorkObject) {
 	}
 	if c.GetHeaderByHash(block.Hash()) == nil {
 		// Only add non dom blocks to the append queue
-		_, order, err := c.CalcOrder(block.Header())
+		_, order, err := c.CalcOrder(block)
 		if err != nil {
 			return
 		}
@@ -624,12 +624,12 @@ func (c *Core) WriteBlock(block *types.WorkObject) {
 
 	if nodeCtx == common.PRIME_CTX {
 		if block != nil {
-			c.SetSyncTarget(block.Header())
+			c.SetSyncTarget(block)
 		}
 	}
 }
 
-func (c *Core) Append(header *types.Header, manifest types.BlockManifest, domPendingHeader *types.Header, domTerminus common.Hash, domOrigin bool, newInboundEtxs types.Transactions) (types.Transactions, bool, bool, error) {
+func (c *Core) Append(header *types.WorkObject, manifest types.BlockManifest, domPendingHeader *types.WorkObject, domTerminus common.Hash, domOrigin bool, newInboundEtxs types.Transactions) (types.Transactions, bool, bool, error) {
 	nodeCtx := c.NodeCtx()
 	newPendingEtxs, subReorg, setHead, err := c.sl.Append(header, domPendingHeader, domTerminus, domOrigin, newInboundEtxs)
 	if err != nil {
@@ -694,7 +694,7 @@ func (c *Core) UpdateDom(oldTerminus common.Hash, pendingHeader types.PendingHea
 	c.sl.UpdateDom(oldTerminus, pendingHeader, location)
 }
 
-func (c *Core) NewGenesisPendigHeader(pendingHeader *types.Header) {
+func (c *Core) NewGenesisPendigHeader(pendingHeader *types.WorkObject) {
 	c.sl.NewGenesisPendingHeader(pendingHeader)
 }
 
@@ -742,7 +742,7 @@ func (c *Core) AddPendingEtxsRollup(pEtxsRollup types.PendingEtxsRollup) error {
 	return c.sl.AddPendingEtxsRollup(pEtxsRollup)
 }
 
-func (c *Core) GenerateRecoveryPendingHeader(pendingHeader *types.Header, checkpointHashes types.Termini) error {
+func (c *Core) GenerateRecoveryPendingHeader(pendingHeader *types.WorkObject, checkpointHashes types.Termini) error {
 	return c.sl.GenerateRecoveryPendingHeader(pendingHeader, checkpointHashes)
 }
 
@@ -788,7 +788,7 @@ func (c *Core) GetBlockOrCandidateByHash(hash common.Hash) *types.WorkObject {
 
 // GetHeaderByNumber retrieves a block header from the database by number,
 // caching it (associated with its hash) if found.
-func (c *Core) GetHeaderByNumber(number uint64) *types.Header {
+func (c *Core) GetHeaderByNumber(number uint64) *types.WorkObject {
 	return c.sl.hc.GetHeaderByNumber(number)
 }
 
@@ -818,7 +818,7 @@ func (c *Core) GetGasUsedInChain(block *types.WorkObject, length int) int64 {
 
 // GetGasUsedInChain retrieves all the gas used from a given block backwards until
 // a specific distance is reached.
-func (c *Core) CalculateBaseFee(header *types.Header) *big.Int {
+func (c *Core) CalculateBaseFee(header *types.WorkObject) *big.Int {
 	return c.sl.hc.CalculateBaseFee(header)
 }
 
@@ -829,46 +829,46 @@ func (c *Core) CurrentBlock() *types.WorkObject {
 
 // CurrentHeader retrieves the current head header of the canonical chain. The
 // header is retrieved from the HeaderChain's internal cache.
-func (c *Core) CurrentHeader() *types.Header {
+func (c *Core) CurrentHeader() *types.WorkObject {
 	return c.sl.hc.CurrentHeader()
 }
 
 // CurrentLogEntropy returns the logarithm of the total entropy reduction since genesis for our current head block
 func (c *Core) CurrentLogEntropy() *big.Int {
-	return c.engine.TotalLogS(c.sl.hc.CurrentHeader())
+	return c.engine.TotalLogS(c.sl.hc.CurrentBlock())
 }
 
 // TotalLogS returns the total entropy reduction if the chain since genesis to the given header
-func (c *Core) TotalLogS(header *types.Header) *big.Int {
+func (c *Core) TotalLogS(header *types.WorkObject) *big.Int {
 	return c.engine.TotalLogS(header)
 }
 
 // CalcOrder returns the order of the block within the hierarchy of chains
-func (c *Core) CalcOrder(header *types.Header) (*big.Int, int, error) {
+func (c *Core) CalcOrder(header *types.WorkObject) (*big.Int, int, error) {
 	return c.engine.CalcOrder(header)
 }
 
 // GetHeader retrieves a block header from the database by hash and number,
 // caching it if found.
-func (c *Core) GetHeader(hash common.Hash, number uint64) *types.Header {
+func (c *Core) GetHeader(hash common.Hash, number uint64) *types.WorkObject {
 	return c.sl.hc.GetHeader(hash, number)
 }
 
 // GetHeaderByHash retrieves a block header from the database by hash, caching it if
 // found.
-func (c *Core) GetHeaderByHash(hash common.Hash) *types.Header {
+func (c *Core) GetHeaderByHash(hash common.Hash) *types.WorkObject {
 	return c.sl.hc.GetHeaderByHash(hash)
 }
 
 // GetHeaderOrCandidate retrieves a block header from the database by hash and number,
 // caching it if found.
-func (c *Core) GetHeaderOrCandidate(hash common.Hash, number uint64) *types.Header {
+func (c *Core) GetHeaderOrCandidate(hash common.Hash, number uint64) *types.WorkObject {
 	return c.sl.hc.GetHeaderOrCandidate(hash, number)
 }
 
 // GetHeaderOrCandidateByHash retrieves a block header from the database by hash, caching it if
 // found.
-func (c *Core) GetHeaderOrCandidateByHash(hash common.Hash) *types.Header {
+func (c *Core) GetHeaderOrCandidateByHash(hash common.Hash) *types.WorkObject {
 	return c.sl.hc.GetHeaderOrCandidateByHash(hash)
 }
 

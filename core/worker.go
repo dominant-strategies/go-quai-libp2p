@@ -455,7 +455,7 @@ func (w *worker) asyncStateLoop() {
 					w.interrupt = make(chan struct{})
 					return
 				default:
-					wo := head.WorkObject
+					wo := head.Block
 					header, err := w.GeneratePendingHeader(wo, true)
 					if err != nil {
 						w.logger.WithField("err", err).Error("Error generating pending header")
@@ -474,7 +474,7 @@ func (w *worker) asyncStateLoop() {
 					w.remoteUncles = make(map[common.Hash]*types.WorkObject)
 					w.uncleMu.Unlock()
 				}
-				for _, wo := range side.WorkObjects {
+				for _, wo := range side.Blocks {
 
 					// Short circuit for duplicate side blocks
 					w.uncleMu.RLock()
@@ -509,7 +509,7 @@ func (w *worker) asyncStateLoop() {
 }
 
 // GeneratePendingBlock generates pending block given a commited block.
-func (w *worker) GeneratePendingHeader(wo *types.WorkObject, fill bool) (*types.WorkObjectHeader, error) {
+func (w *worker) GeneratePendingHeader(wo *types.WorkObject, fill bool) (*types.WorkObject, error) {
 	nodeCtx := w.hc.NodeCtx()
 
 	w.interruptAsyncPhGen()
@@ -1111,7 +1111,7 @@ func (w *worker) GetPendingBlockBody(woHeader *types.WorkObjectHeader) *types.Wo
 	return nil
 }
 
-func (w *worker) SubscribeAsyncPendingHeader(ch chan *types.Header) event.Subscription {
+func (w *worker) SubscribeAsyncPendingHeader(ch chan *types.WorkObject) event.Subscription {
 	return w.scope.Track(w.asyncPhFeed.Subscribe(ch))
 }
 

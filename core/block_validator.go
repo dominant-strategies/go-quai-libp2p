@@ -152,7 +152,7 @@ func (v *BlockValidator) ValidateState(block *types.WorkObject, statedb *state.S
 // CalcGasLimit computes the gas limit of the next block after parent. It aims
 // to keep the baseline gas close to the provided target, and increase it towards
 // the target if the baseline gas is lower.
-func CalcGasLimit(parent *types.Header, gasCeil uint64) uint64 {
+func CalcGasLimit(parent *types.WorkObject, gasCeil uint64) uint64 {
 
 	parentGasLimit := parent.GasLimit()
 

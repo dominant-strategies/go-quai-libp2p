@@ -142,7 +142,7 @@ const (
 // some pre checks in tx pool and event subscribers.
 type blockChain interface {
 	CurrentBlock() *types.WorkObject
-	CurrentStateHeader() *types.Header
+	CurrentStateHeader() *types.WorkObject
 	GetBlock(hash common.Hash, number uint64) *types.WorkObject
 	StateAt(root common.Hash, utxoRoot common.Hash) (*state.StateDB, error)
 	FetchUtxosMain(view *types.UtxoViewpoint, outpoints []types.OutPoint) error

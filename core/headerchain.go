@@ -54,7 +54,7 @@ type HeaderChain struct {
 	scope         event.SubscriptionScope
 
 	headerDb      ethdb.Database
-	genesisHeader *types.Header
+	genesisHeader *types.WorkObject
 
 	currentHeader      atomic.Value // Current head of the header chain (may be above the block chain!)
 	currentStateHeader atomic.Value // Current head of the header chain (may be different than currentHeader)
@@ -74,7 +74,7 @@ type HeaderChain struct {
 	procInterrupt int32          // interrupt signaler for block processing
 
 	headermu      sync.RWMutex
-	heads         []*types.Header
+	heads         []*types.WorkObject
 	slicesRunning []common.Location
 
 	logger *log.Logger
@@ -137,7 +137,7 @@ func NewHeaderChain(db ethdb.Database, engine consensus.Engine, pEtxsRollupFetch
 	}
 
 	// Initialize the heads slice
-	heads := make([]*types.Header, 0)
+	heads := make([]*types.WorkObject, 0)
 	hc.heads = heads
 
 	// Initialize the UTXO cache
@@ -255,7 +255,7 @@ func (hc *HeaderChain) collectInclusiveEtxRollup(b *types.WorkObject) (types.Tra
 		}
 	}
 	// Terminate the search on coincidence with dom chain
-	if hc.engine.IsDomCoincident(hc, b.Header()) {
+	if hc.engine.IsDomCoincident(hc, b) {
 		return newEtxs, nil
 	}
 	// Recursively get the ancestor rollup, until a coincident ancestor is found
@@ -272,7 +272,7 @@ func (hc *HeaderChain) collectInclusiveEtxRollup(b *types.WorkObject) (types.Tra
 }
 
 // Append
-func (hc *HeaderChain) AppendHeader(header *types.Header) error {
+func (hc *HeaderChain) AppendHeader(header *types.WorkObject) error {
 	nodeCtx := hc.NodeCtx()
 	hc.logger.WithFields(log.Fields{
 		"Hash":     header.Hash(),
@@ -326,7 +326,7 @@ func (hc *HeaderChain) AppendBlock(block *types.WorkObject, newInboundEtxs types
 }
 
 // SetCurrentHeader sets the current header based on the POEM choice
-func (hc *HeaderChain) SetCurrentHeader(head *types.Header) error {
+func (hc *HeaderChain) SetCurrentHeader(head *types.WorkObject) error {
 	hc.headermu.Lock()
 	defer hc.headermu.Unlock()
 
@@ -352,11 +352,11 @@ func (hc *HeaderChain) SetCurrentHeader(head *types.Header) error {
 
 	//Find a common header
 	commonHeader := hc.findCommonAncestor(head)
-	newHeader := types.CopyHeader(head)
+	newHeader := head.CopyWorkObject()
 
 	// Delete each header and rollback state processor until common header
 	// Accumulate the hash slice stack
-	var hashStack []*types.Header
+	var hashStack []*types.WorkObject
 	for {
 		if newHeader.Hash() == commonHeader.Hash() {
 			break
@@ -371,7 +371,7 @@ func (hc *HeaderChain) SetCurrentHeader(head *types.Header) error {
 			break
 		}
 	}
-	var prevHashStack []*types.Header
+	var prevHashStack []*types.WorkObject
 	for {
 		if prevHeader.Hash() == commonHeader.Hash() {
 			break
@@ -412,7 +412,7 @@ func (hc *HeaderChain) SetCurrentHeader(head *types.Header) error {
 }
 
 // SetCurrentState updates the current Quai state and Qi UTXO set upon which the current pending block is built
-func (hc *HeaderChain) SetCurrentState(head *types.Header) error {
+func (hc *HeaderChain) SetCurrentState(head *types.WorkObject) error {
 	hc.headermu.Lock()
 	defer hc.headermu.Unlock()
 
@@ -421,8 +421,8 @@ func (hc *HeaderChain) SetCurrentState(head *types.Header) error {
 		return nil
 	}
 
-	current := types.CopyHeader(head)
-	var headersWithoutState []*types.Header
+	current := head.CopyWorkObject()
+	var headersWithoutState []*types.WorkObject
 	for {
 		headersWithoutState = append(headersWithoutState, current)
 		header := hc.GetHeader(current.ParentHash(nodeCtx), current.NumberU64(nodeCtx)-1)
@@ -435,7 +435,7 @@ func (hc *HeaderChain) SetCurrentState(head *types.Header) error {
 		if etxSet != nil {
 			break
 		}
-		current = types.CopyHeader(header)
+		current = header.CopyWorkObject()
 	}
 
 	// Run through the hash stack to update canonicalHash and forward state processor
@@ -452,7 +452,7 @@ func (hc *HeaderChain) SetCurrentState(head *types.Header) error {
 // Currently, the UTXO set follows the current state/pending header, not the canonical current header.
 // An improvement could be to use a batch instead of the db in case of an error during re-org requiring a reset.
 // This function MUST be called with the header mutex locked.
-func (hc *HeaderChain) setCurrentUTXOSet(head *types.Header) error {
+func (hc *HeaderChain) setCurrentUTXOSet(head *types.WorkObject) error {
 	nodeCtx := hc.NodeCtx()
 	prevHeader := hc.CurrentStateHeader()
 	// if trying to set the same header, escape
@@ -490,7 +490,7 @@ func (hc *HeaderChain) setCurrentUTXOSet(head *types.Header) error {
 			for _, txOut := range block.QiTransactions()[0].TxOut() {
 				totalCoinbaseOut.Add(totalCoinbaseOut, types.Denominations[txOut.Denomination])
 			}
-			maxCoinbaseOut := misc.CalculateRewardForQiWithFeesBigInt(block.Header(), totalFees)
+			maxCoinbaseOut := misc.CalculateRewardForQiWithFeesBigInt(block, totalFees)
 			if totalCoinbaseOut.Cmp(maxCoinbaseOut) == 1 {
 				return fmt.Errorf("coinbase output value of %v is higher than expected value of %v", totalCoinbaseOut, maxCoinbaseOut)
 			}
@@ -575,7 +575,7 @@ func (hc *HeaderChain) setCurrentUTXOSet(head *types.Header) error {
 				// Should we limit the number of outputs?
 				totalCoinbaseOut.Add(totalCoinbaseOut, types.Denominations[txOut.Denomination])
 			}
-			maxCoinbaseOut := misc.CalculateRewardForQiWithFeesBigInt(block.Header(), totalFees)
+			maxCoinbaseOut := misc.CalculateRewardForQiWithFeesBigInt(block, totalFees)
 			if totalCoinbaseOut.Cmp(maxCoinbaseOut) == 1 {
 				return fmt.Errorf("coinbase output value of %v is higher than expected value of %v", totalCoinbaseOut, maxCoinbaseOut)
 			}
@@ -592,13 +592,13 @@ func (hc *HeaderChain) setCurrentUTXOSet(head *types.Header) error {
 }
 
 // ReadInboundEtxsAndAppendBlock reads the inbound etxs from database and appends the block
-func (hc *HeaderChain) ReadInboundEtxsAndAppendBlock(header *types.Header) error {
+func (hc *HeaderChain) ReadInboundEtxsAndAppendBlock(header *types.WorkObject) error {
 	nodeCtx := hc.NodeCtx()
 	block := hc.GetBlockOrCandidate(header.Hash(), header.NumberU64(nodeCtx))
 	if block == nil {
 		return errors.New("Could not find block during reorg")
 	}
-	_, order, err := hc.engine.CalcOrder(block.Header())
+	_, order, err := hc.engine.CalcOrder(block)
 	if err != nil {
 		return err
 	}
@@ -610,8 +610,8 @@ func (hc *HeaderChain) ReadInboundEtxsAndAppendBlock(header *types.Header) error
 }
 
 // findCommonAncestor
-func (hc *HeaderChain) findCommonAncestor(header *types.Header) *types.Header {
-	current := types.CopyHeader(header)
+func (hc *HeaderChain) findCommonAncestor(header *types.WorkObject) *types.WorkObject {
+	current := header.CopyWorkObject()
 	for {
 		if current == nil {
 			return nil
@@ -626,8 +626,8 @@ func (hc *HeaderChain) findCommonAncestor(header *types.Header) *types.Header {
 }
 
 // findCommonAncestor
-func (hc *HeaderChain) findCommonStateHeadAncestor(header *types.Header) *types.Header {
-	current := types.CopyHeader(header)
+func (hc *HeaderChain) findCommonStateHeadAncestor(header *types.WorkObject) *types.WorkObject {
+	current := header.CopyWorkObject()
 	for {
 		if current == nil {
 			return nil
@@ -700,7 +700,7 @@ func (hc *HeaderChain) loadLastState() error {
 		}
 	}
 
-	heads := make([]*types.Header, 0)
+	heads := make([]*types.WorkObject, 0)
 	for _, hash := range headsHashes {
 		heads = append(heads, hc.GetHeaderByHash(hash))
 	}
@@ -831,14 +831,14 @@ func (hc *HeaderChain) WriteBlock(block *types.WorkObject) {
 
 // GetHeader retrieves a block header from the database by hash and number,
 // caching it if found.
-func (hc *HeaderChain) GetHeader(hash common.Hash, number uint64) *types.Header {
+func (hc *HeaderChain) GetHeader(hash common.Hash, number uint64) *types.WorkObject {
 	termini := hc.GetTerminiByHash(hash)
 	if termini == nil {
 		return nil
 	}
 	// Short circuit if the header's already in the cache, retrieve otherwise
 	if header, ok := hc.headerCache.Get(hash); ok {
-		return header.(*types.Header)
+		return header.(*types.WorkObject)
 	}
 	header := rawdb.ReadHeader(hc.headerDb, hash, number)
 	if header == nil {
@@ -851,7 +851,7 @@ func (hc *HeaderChain) GetHeader(hash common.Hash, number uint64) *types.Header 
 
 // GetHeaderByHash retrieves a block header from the database by hash, caching it if
 // found.
-func (hc *HeaderChain) GetHeaderByHash(hash common.Hash) *types.Header {
+func (hc *HeaderChain) GetHeaderByHash(hash common.Hash) *types.WorkObject {
 	termini := hc.GetTerminiByHash(hash)
 	if termini == nil {
 		return nil
@@ -866,10 +866,10 @@ func (hc *HeaderChain) GetHeaderByHash(hash common.Hash) *types.Header {
 
 // GetHeaderOrCandidate retrieves a block header from the database by hash and number,
 // caching it if found.
-func (hc *HeaderChain) GetHeaderOrCandidate(hash common.Hash, number uint64) *types.Header {
+func (hc *HeaderChain) GetHeaderOrCandidate(hash common.Hash, number uint64) *types.WorkObject {
 	// Short circuit if the header's already in the cache, retrieve otherwise
 	if header, ok := hc.headerCache.Get(hash); ok {
-		return header.(*types.Header)
+		return header.(*types.WorkObject)
 	}
 	header := rawdb.ReadHeader(hc.headerDb, hash, number)
 	if header == nil {
@@ -882,7 +882,7 @@ func (hc *HeaderChain) GetHeaderOrCandidate(hash common.Hash, number uint64) *ty
 
 // RecoverCurrentHeader retrieves the current head header of the canonical chain. The
 // header is retrieved from the HeaderChain's internal cache
-func (hc *HeaderChain) RecoverCurrentHeader() *types.Header {
+func (hc *HeaderChain) RecoverCurrentHeader() *types.WorkObject {
 	// Start logarithmic ascent to find the upper bound
 	high := uint64(1)
 	for hc.GetHeaderByNumber(high) != nil {
@@ -906,7 +906,7 @@ func (hc *HeaderChain) RecoverCurrentHeader() *types.Header {
 
 // GetHeaderOrCandidateByHash retrieves a block header from the database by hash, caching it if
 // found.
-func (hc *HeaderChain) GetHeaderOrCandidateByHash(hash common.Hash) *types.Header {
+func (hc *HeaderChain) GetHeaderOrCandidateByHash(hash common.Hash) *types.WorkObject {
 	number := hc.GetBlockNumber(hash)
 	if number == nil {
 		return nil
@@ -927,7 +927,7 @@ func (hc *HeaderChain) HasHeader(hash common.Hash, number uint64) bool {
 
 // GetHeaderByNumber retrieves a block header from the database by number,
 // caching it (associated with its hash) if found.
-func (hc *HeaderChain) GetHeaderByNumber(number uint64) *types.Header {
+func (hc *HeaderChain) GetHeaderByNumber(number uint64) *types.WorkObject {
 	hash := rawdb.ReadCanonicalHash(hc.headerDb, number)
 	if hash == (common.Hash{}) {
 		return nil
@@ -942,16 +942,16 @@ func (hc *HeaderChain) GetCanonicalHash(number uint64) common.Hash {
 
 // CurrentHeader retrieves the current head header of the canonical chain. The
 // header is retrieved from the HeaderChain's internal cache.
-func (hc *HeaderChain) CurrentHeader() *types.Header {
-	return hc.currentHeader.Load().(*types.Header)
+func (hc *HeaderChain) CurrentHeader() *types.WorkObject {
+	return hc.currentHeader.Load().(*types.WorkObject)
 }
 
 // CurrentStateHeader retrieves the current state header of the chain that the pending block is based upon.
 // The header is retrieved from the HeaderChain's internal cache.
 // This is cached only and is not stored in the database.
 // Upon node startup, the current state header is *always* the current canonical header.
-func (hc *HeaderChain) CurrentStateHeader() *types.Header {
-	return hc.currentStateHeader.Load().(*types.Header)
+func (hc *HeaderChain) CurrentStateHeader() *types.WorkObject {
+	return hc.currentStateHeader.Load().(*types.WorkObject)
 }
 
 // CurrentBlock returns the block for the current header.
@@ -960,7 +960,7 @@ func (hc *HeaderChain) CurrentBlock() *types.WorkObject {
 }
 
 // SetGenesis sets a new genesis block header for the chain
-func (hc *HeaderChain) SetGenesis(head *types.Header) {
+func (hc *HeaderChain) SetGenesis(head *types.WorkObject) {
 	hc.genesisHeader = head
 }
 
@@ -1025,7 +1025,7 @@ func (hc *HeaderChain) GetGasUsedInChain(block *types.WorkObject, length int) in
 
 // GetGasUsedInChain retrieves all the gas used from a given block backwards until
 // a specific distance is reached.
-func (hc *HeaderChain) CalculateBaseFee(header *types.Header) *big.Int {
+func (hc *HeaderChain) CalculateBaseFee(header *types.WorkObject) *big.Int {
 	return misc.CalcBaseFee(hc.Config(), header)
 }
 
@@ -1445,7 +1445,7 @@ func (hc *HeaderChain) DeleteUtxoViewpoint(hash common.Hash) error {
 //
 // See the comment for NewBlockTemplate for more information about why the nil
 // address handling is useful.
-func createCoinbaseTxWithFees(header *types.Header, fees *big.Int, state *state.StateDB) (*types.Transaction, error) {
+func createCoinbaseTxWithFees(header *types.WorkObject, fees *big.Int, state *state.StateDB) (*types.Transaction, error) {
 	parentHash := header.ParentHash(header.Location().Context()) // all blocks should have zone location and context
 	in := types.TxIn{
 		// Coinbase transactions have no inputs, so previous outpoint is

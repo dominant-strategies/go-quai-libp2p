@@ -101,11 +101,11 @@ func (ec *Client) SubscribePendingHeader(ctx context.Context, ch chan<- *types.H
 	return ec.c.QuaiSubscribe(ctx, ch, "pendingHeader")
 }
 
-func (ec *Client) Append(ctx context.Context, header *types.Header, manifest types.BlockManifest, domPendingHeader *types.Header, domTerminus common.Hash, domOrigin bool, newInboundEtxs types.Transactions) (types.Transactions, bool, bool, error) {
+func (ec *Client) Append(ctx context.Context, header *types.WorkObject, manifest types.BlockManifest, domPendingHeader *types.WorkObject, domTerminus common.Hash, domOrigin bool, newInboundEtxs types.Transactions) (types.Transactions, bool, bool, error) {
 	fields := map[string]interface{}{
-		"header":           header.RPCMarshalHeader(),
+		"header":           header.RPCMarshalWorkObject(),
 		"manifest":         manifest,
-		"domPendingHeader": domPendingHeader.RPCMarshalHeader(),
+		"domPendingHeader": domPendingHeader.RPCMarshalWorkObject(),
 		"domTerminus":      domTerminus,
 		"domOrigin":        domOrigin,
 		"newInboundEtxs":   newInboundEtxs,
@@ -163,8 +163,8 @@ func (ec *Client) RequestDomToAppendOrFetch(ctx context.Context, hash common.Has
 	ec.c.CallContext(ctx, nil, "quai_requestDomToAppendOrFetch", data)
 }
 
-func (ec *Client) NewGenesisPendingHeader(ctx context.Context, header *types.Header) {
-	ec.c.CallContext(ctx, nil, "quai_newGenesisPendingHeader", header.RPCMarshalHeader())
+func (ec *Client) NewGenesisPendingHeader(ctx context.Context, header *types.WorkObject) {
+	ec.c.CallContext(ctx, nil, "quai_newGenesisPendingHeader", header.RPCMarshalWorkObject())
 }
 
 // GetManifest will get the block manifest ending with the parent hash
@@ -239,9 +239,9 @@ func (ec *Client) SendPendingEtxsRollupToDom(ctx context.Context, pEtxsRollup ty
 	return ec.c.CallContext(ctx, &raw, "quai_sendPendingEtxsRollupToDom", fields)
 }
 
-func (ec *Client) GenerateRecoveryPendingHeader(ctx context.Context, pendingHeader *types.Header, checkpointHashes types.Termini) error {
+func (ec *Client) GenerateRecoveryPendingHeader(ctx context.Context, pendingHeader *types.WorkObject, checkpointHashes types.Termini) error {
 	fields := make(map[string]interface{})
-	fields["pendingHeader"] = pendingHeader.RPCMarshalHeader()
+	fields["pendingHeader"] = pendingHeader.RPCMarshalWorkObject()
 	fields["checkpointHashes"] = checkpointHashes.RPCMarshalTermini()
 	return ec.c.CallContext(ctx, nil, "quai_generateRecoveryPendingHeader", fields)
 }
@@ -266,8 +266,8 @@ func (ec *Client) HeaderByNumber(ctx context.Context, number string) *types.Head
 	return header
 }
 
-func (ec *Client) SetSyncTarget(ctx context.Context, header *types.Header) {
-	fields := header.RPCMarshalHeader()
+func (ec *Client) SetSyncTarget(ctx context.Context, header *types.WorkObject) {
+	fields := header.RPCMarshalWorkObject()
 	ec.c.CallContext(ctx, nil, "quai_setSyncTarget", fields)
 }
 

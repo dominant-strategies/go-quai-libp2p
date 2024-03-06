@@ -308,27 +308,8 @@ func HasHeader(db ethdb.Reader, hash common.Hash, number uint64) bool {
 }
 
 // ReadHeader retrieves the block header corresponding to the hash.
-func ReadHeader(db ethdb.Reader, hash common.Hash, number uint64) *types.Header {
-	data := ReadHeaderProto(db, hash, number)
-	if len(data) == 0 {
-		log.Global.Warn("proto header is nil")
-		return nil
-	}
-	protoHeader := new(types.ProtoHeader)
-	err := proto.Unmarshal(data, protoHeader)
-	if err != nil {
-		log.Global.WithField("err", err).Fatal("Failed to proto Unmarshal header")
-	}
-	header := new(types.Header)
-	err = header.ProtoDecode(protoHeader)
-	if err != nil {
-		log.Global.WithFields(log.Fields{
-			"hash": hash,
-			"err":  err,
-		}).Error("Invalid block header Proto")
-		return nil
-	}
-	return header
+func ReadHeader(db ethdb.Reader, hash common.Hash, number uint64) *types.WorkObject {
+	return ReadWorkObject(db, hash, types.BlockObject)
 }
 
 // WriteHeader stores a block header into the database and also stores the hash-
@@ -631,8 +612,16 @@ func DeleteTermini(db ethdb.KeyValueWriter, hash common.Hash) {
 }
 
 // ReadWorkObjectHeader retreive's the work object header stored in hash.
-func ReadWorkObjectHeader(db ethdb.Reader, hash common.Hash) *types.WorkObjectHeader {
-	key := workObjectHeaderKey(hash)
+func ReadWorkObjectHeader(db ethdb.Reader, hash common.Hash, woType int) *types.WorkObjectHeader {
+	var key []byte
+	switch woType {
+	case types.BlockObject:
+		key = blockWorkObjectHeaderKey(hash)
+	case types.TxObject:
+		key = txWorkObjectHeaderKey(hash)
+	case types.PhObject:
+		key = phWorkObjectHeaderKey(hash)
+	}
 	data, _ := db.Get(key)
 	if len(data) == 0 {
 		return nil
@@ -655,8 +644,16 @@ func ReadWorkObjectHeader(db ethdb.Reader, hash common.Hash) *types.WorkObjectHe
 }
 
 // WriteWorkObjectHeader writes the work object header of the terminus hash.
-func WriteWorkObjectHeader(db ethdb.KeyValueWriter, hash common.Hash, workObjectHeader types.WorkObjectHeader) {
-	key := workObjectHeaderKey(hash)
+func WriteWorkObjectHeader(db ethdb.KeyValueWriter, hash common.Hash, workObjectHeader types.WorkObjectHeader, woType int) {
+	var key []byte
+	switch woType {
+	case types.BlockObject:
+		key = blockWorkObjectHeaderKey(hash)
+	case types.TxObject:
+		key = txWorkObjectHeaderKey(hash)
+	case types.PhObject:
+		key = phWorkObjectHeaderKey(hash)
+	}
 	protoWorkObjectHeader, _ := workObjectHeader.ProtoEncode()
 	data, err := proto.Marshal(protoWorkObjectHeader)
 	if err != nil {
@@ -668,20 +665,28 @@ func WriteWorkObjectHeader(db ethdb.KeyValueWriter, hash common.Hash, workObject
 }
 
 // DeleteWorkObjectHeader deletes the work object header stored for the header hash.
-func DeleteWorkObjectHeader(db ethdb.KeyValueWriter, hash common.Hash) {
-	key := workObjectHeaderKey(hash)
+func DeleteWorkObjectHeader(db ethdb.KeyValueWriter, hash common.Hash, woType int) {
+	var key []byte
+	switch woType {
+	case types.BlockObject:
+		key = blockWorkObjectHeaderKey(hash)
+	case types.TxObject:
+		key = txWorkObjectHeaderKey(hash)
+	case types.PhObject:
+		key = phWorkObjectHeaderKey(hash)
+	}
 	if err := db.Delete(key); err != nil {
 		log.Global.WithField("err", err).Fatal("Failed to delete work object header ")
 	}
 }
 
 // ReadWorkObject retreive's the work object stored in hash.
-func ReadWorkObject(db ethdb.Reader, hash common.Hash, location common.Location) *types.WorkObject {
-	workObjectHeader := ReadWorkObjectHeader(db, hash)
+func ReadWorkObject(db ethdb.Reader, hash common.Hash, woType int) *types.WorkObject {
+	workObjectHeader := ReadWorkObjectHeader(db, hash, woType)
 	if workObjectHeader == nil {
 		return nil
 	}
-	workObjectBody := ReadWorkObjectBody(db, hash, location)
+	workObjectBody := ReadWorkObjectBody(db, hash)
 	if workObjectBody == nil {
 		return nil
 	}
@@ -689,31 +694,31 @@ func ReadWorkObject(db ethdb.Reader, hash common.Hash, location common.Location)
 }
 
 // WriteWorkObject writes the work object of the terminus hash.
-func WriteWorkObject(db ethdb.KeyValueWriter, hash common.Hash, workObject types.WorkObject) {
-	WriteWorkObjectBody(db, hash, *workObject.Body())
-	WriteWorkObjectHeader(db, hash, *workObject.WorkObjectHeader())
+func WriteWorkObject(db ethdb.KeyValueWriter, hash common.Hash, workObject types.WorkObject, woType int) {
+	WriteWorkObjectBody(db, hash, *workObject.Body(), woType)
+	WriteWorkObjectHeader(db, hash, *workObject.WorkObjectHeader(), woType)
 	//TODO: mmtx transaction
 }
 
 // DeleteWorkObject deletes the work object stored for the header hash.
-func DeleteWorkObject(db ethdb.KeyValueWriter, hash common.Hash, number uint64) {
+func DeleteWorkObject(db ethdb.KeyValueWriter, hash common.Hash, number uint64, woType int) {
 	DeleteWorkObjectBody(db, hash)
-	DeleteWorkObjectHeader(db, hash) //TODO: mmtx transaction
+	DeleteWorkObjectHeader(db, hash, woType) //TODO: mmtx transaction
 	DeleteHeader(db, hash, number)
 	DeleteReceipts(db, hash, number)
 }
 
 // DeleteWorkObjectWithoutNumber removes all block data associated with a hash, except
 // the hash to number mapping.
-func DeleteBlockWithoutNumber(db ethdb.KeyValueWriter, hash common.Hash, number uint64) {
+func DeleteBlockWithoutNumber(db ethdb.KeyValueWriter, hash common.Hash, number uint64, woType int) {
 	DeleteWorkObjectBody(db, hash)
-	DeleteWorkObjectHeader(db, hash) //TODO: mmtx transaction
+	DeleteWorkObjectHeader(db, hash, woType) //TODO: mmtx transaction
 	DeleteReceipts(db, hash, number)
 	deleteHeaderWithoutNumber(db, hash, number)
 }
 
 // ReadWorkObjectBody retreive's the work object body stored in hash.
-func ReadWorkObjectBody(db ethdb.Reader, hash common.Hash, location common.Location) *types.WorkObjectBody {
+func ReadWorkObjectBody(db ethdb.Reader, hash common.Hash) *types.WorkObjectBody {
 	key := workObjectBodyKey(hash)
 	data, _ := db.Get(key)
 	if len(data) == 0 {
@@ -725,7 +730,7 @@ func ReadWorkObjectBody(db ethdb.Reader, hash common.Hash, location common.Locat
 		log.Global.WithField("err", err).Fatal("Failed to proto Unmarshal work object body")
 	}
 	workObjectBody := new(types.WorkObjectBody)
-	err = workObjectBody.ProtoDecode(protoWorkObjectBody, location)
+	err = workObjectBody.ProtoDecode(protoWorkObjectBody)
 	if err != nil {
 		log.Global.WithFields(log.Fields{
 			"hash": hash,
@@ -737,7 +742,8 @@ func ReadWorkObjectBody(db ethdb.Reader, hash common.Hash, location common.Locat
 }
 
 // WriteWorkObjectBody writes the work object body of the terminus hash.
-func WriteWorkObjectBody(db ethdb.KeyValueWriter, hash common.Hash, workObjectBody types.WorkObjectBody) {
+func WriteWorkObjectBody(db ethdb.KeyValueWriter, hash common.Hash, workObjectBody types.WorkObjectBody, woType int) {
+
 	key := workObjectBodyKey(hash)
 	protoWorkObjectBody, err := workObjectBody.ProtoEncode()
 	if err != nil {
@@ -1051,7 +1057,7 @@ func (b *badWorkObject) ProtoDecode(pb *ProtoBadWorkObject, location common.Loca
 	}
 	b.woHeader = woHeader
 	woBody := new(types.WorkObjectBody)
-	if err := woBody.ProtoDecode(pb.WoBody, location); err != nil {
+	if err := woBody.ProtoDecode(pb.WoBody); err != nil {
 		return err
 	}
 	b.woBody = woBody
@@ -1198,7 +1204,7 @@ func DeleteBadWorkObjects(db ethdb.KeyValueWriter) {
 }
 
 // FindCommonAncestor returns the last common ancestor of two block headers
-func FindCommonAncestor(db ethdb.Reader, a, b *types.Header, nodeCtx int) *types.Header {
+func FindCommonAncestor(db ethdb.Reader, a, b *types.WorkObject, nodeCtx int) *types.WorkObject {
 	for bn := b.NumberU64(nodeCtx); a.NumberU64(nodeCtx) > bn; {
 		a = ReadHeader(db, a.ParentHash(nodeCtx), a.NumberU64(nodeCtx)-1)
 		if a == nil {
@@ -1225,7 +1231,7 @@ func FindCommonAncestor(db ethdb.Reader, a, b *types.Header, nodeCtx int) *types
 }
 
 // ReadHeadHeader returns the current canonical head header.
-func ReadHeadHeader(db ethdb.Reader) *types.Header {
+func ReadHeadHeader(db ethdb.Reader) *types.WorkObject {
 	headHeaderHash := ReadHeadHeaderHash(db)
 	if headHeaderHash == (common.Hash{}) {
 		return nil
@@ -1247,7 +1253,7 @@ func ReadHeadBlock(db ethdb.Reader, location common.Location) *types.WorkObject 
 	if headWorkObjectNumber == nil {
 		return nil
 	}
-	return ReadWorkObject(db, headWorkObjectHash, location)
+	return ReadWorkObject(db, headWorkObjectHash, types.BlockObject)
 }
 
 // ReadEtxSetProto retrieves the EtxSet corresponding to a given block, in Proto encoding.

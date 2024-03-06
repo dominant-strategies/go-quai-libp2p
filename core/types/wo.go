@@ -47,6 +47,13 @@ type WorkObjectBody struct {
 	manifest        BlockManifest
 }
 
+// Work object types
+const (
+	BlockObject = iota
+	TxObject
+	PhObject
+)
+
 type WorkObjects []*WorkObject
 
 func (wo *WorkObject) Header() *Header {
@@ -137,8 +144,64 @@ func (wo *WorkObject) ParentEntropy(nodeCtx int) *big.Int {
 	return wo.woBody.header.ParentEntropy(nodeCtx)
 }
 
+func (wo *WorkObject) EtxRollupHash() common.Hash {
+	return wo.woBody.header.EtxRollupHash()
+}
+
+func (wo *WorkObject) BaseFee() *big.Int {
+	return wo.woBody.header.BaseFee()
+}
+
+func (wo *WorkObject) GasUsed() uint64 {
+	return wo.woBody.header.GasUsed()
+}
+
+func (wo *WorkObject) GasLimit() uint64 {
+	return wo.woBody.header.GasLimit()
+}
+
+func (wo *WorkObject) Time() uint64 {
+	return wo.woBody.header.Time()
+}
+
+func (wo *WorkObject) Coinbase() common.Address {
+	return wo.woBody.header.Coinbase()
+}
+
+func (wo *WorkObject) ManifestHash(nodeCtx int) common.Hash {
+	return wo.woBody.header.ManifestHash(nodeCtx)
+}
+
+func (wo *WorkObject) ParentDeltaS(nodeCtx int) *big.Int {
+	return wo.woBody.header.ParentDeltaS(nodeCtx)
+}
+
+func (wo *WorkObject) UncleHash() common.Hash {
+	return wo.woBody.header.UncleHash()
+}
+
+func (wo *WorkObject) EtxHash() common.Hash {
+	return wo.woBody.header.EtxHash()
+}
+
+func (wo *WorkObject) ReceiptHash() common.Hash {
+	return wo.woBody.header.ReceiptHash()
+}
+
+func (wo *WorkObject) Extra() []byte {
+	return wo.woBody.header.Extra()
+}
+
+func (wo *WorkObject) UTXORoot() common.Hash {
+	return wo.woBody.header.UTXORoot()
+}
+
 func (wo *WorkObject) SetTx(tx Transaction) {
 	wo.tx = tx
+}
+
+func (wo *WorkObject) NumberArray() []*big.Int {
+	return wo.woBody.header.NumberArray()
 }
 
 func (wo *WorkObject) SetHeader(header *Header) {
@@ -161,12 +224,14 @@ func (wo *WorkObject) SetManifest(manifest BlockManifest) {
 	wo.woBody.manifest = manifest
 }
 
-func (wo *WorkObject) SetParentHash(parentHash common.Hash) {
+func (wo *WorkObject) SetParentHash(parentHash common.Hash, nodeCtx int) {
 	wo.woHeader.parentHash = parentHash
+	wo.woBody.header.SetParentHash(parentHash, nodeCtx)
 }
 
-func (wo *WorkObject) SetNumber(number *big.Int) {
+func (wo *WorkObject) SetNumber(number *big.Int, nodeCtx int) {
 	wo.woHeader.number = number
+	wo.woBody.header.SetNumber(number, nodeCtx)
 }
 
 func (wo *WorkObject) SetDifficulty(difficulty *big.Int) {
@@ -225,6 +290,34 @@ func (wo *WorkObject) SetCoinbase(coinbase common.Address) {
 	wo.woBody.header.SetCoinbase(coinbase)
 }
 
+func (wo *WorkObject) SetManifestHash(hash common.Hash, nodeCtx int) {
+	wo.woBody.header.SetManifestHash(hash, nodeCtx)
+}
+
+func (wo *WorkObject) SetParentDeltaS(deltaS *big.Int, nodeCtx int) {
+	wo.woBody.header.SetParentDeltaS(deltaS, nodeCtx)
+}
+
+func (wo *WorkObject) SetUncleHash(hash common.Hash) {
+	wo.woBody.header.SetUncleHash(hash)
+}
+
+func (wo *WorkObject) SetEtxHash(hash common.Hash) {
+	wo.woBody.header.SetEtxHash(hash)
+}
+
+func (wo *WorkObject) SetReceiptHash(hash common.Hash) {
+	wo.woBody.header.SetReceiptHash(hash)
+}
+
+func (wo *WorkObject) SetExtra(extra []byte) {
+	wo.woBody.header.SetExtra(extra)
+}
+
+func (wo *WorkObject) SetUTXORoot(root common.Hash) {
+	wo.woBody.header.SetUTXORoot(root)
+}
+
 // GetAppendTime returns the appendTime of the block
 // The appendTime is computed on the first call and cached thereafter.
 func (wo *WorkObject) GetAppendTime() time.Duration {
@@ -246,34 +339,6 @@ func (wo *WorkObject) QiTransactions() []*Transaction {
 
 func (wo *WorkObject) QuaiTransactions() []*Transaction {
 	return wo.woBody.QuaiTransactions()
-}
-
-func (wo *WorkObject) BaseFee() *big.Int {
-	return wo.woBody.header.BaseFee()
-}
-
-func (wo *WorkObject) GasUsed() uint64 {
-	return wo.woBody.header.GasUsed()
-}
-
-func (wo *WorkObject) GasLimit() uint64 {
-	return wo.woBody.header.GasLimit()
-}
-
-func (wo *WorkObject) Time() uint64 {
-	return wo.woBody.header.Time()
-}
-
-func (wo *WorkObject) Extra() []byte {
-	return wo.woBody.header.Extra()
-}
-
-func (wo *WorkObject) Coinbase() common.Address {
-	return wo.woBody.header.Coinbase()
-}
-
-func (wo *WorkObject) EtxRollupHash() common.Hash {
-	return wo.woBody.header.EtxRollupHash()
 }
 
 func (wo *WorkObject) EncodeRLP(w io.Writer) error {
@@ -301,6 +366,14 @@ func (wo *WorkObject) CopyWorkObject() *WorkObject {
 		tx:       wo.tx,
 	}
 }
+func (wo *WorkObject) RPCMarshalWorkObject() map[string]interface{} {
+	result := map[string]interface{}{
+		"header": wo.woHeader.RPCMarshalWorkObjectHeader(),
+		"body":   wo.woBody.RPCMarshalWorkObjectBody(),
+		"tx":     wo.tx,
+	}
+	return result
+}
 
 func (wo *WorkObject) ProtoEncode() (*ProtoWorkObject, error) {
 	header, err := wo.woHeader.ProtoEncode()
@@ -322,19 +395,19 @@ func (wo *WorkObject) ProtoEncode() (*ProtoWorkObject, error) {
 	}, nil
 }
 
-func (wo *WorkObject) ProtoDecode(data *ProtoWorkObject, location common.Location) error {
+func (wo *WorkObject) ProtoDecode(data *ProtoWorkObject) error {
 	protoWoHeader := new(ProtoWorkObjectHeader)
 	err := wo.woHeader.ProtoDecode(protoWoHeader)
 	if err != nil {
 		return err
 	}
 	protoWoBody := new(ProtoWorkObjectBody)
-	err = wo.woBody.ProtoDecode(protoWoBody, location)
+	err = wo.woBody.ProtoDecode(protoWoBody)
 	if err != nil {
 		return err
 	}
 	protoTx := new(ProtoTransaction)
-	err = wo.tx.ProtoDecode(protoTx, location)
+	err = wo.tx.ProtoDecode(protoTx, wo.woHeader.Location())
 	if err != nil {
 		return err
 	}
@@ -658,12 +731,13 @@ func (wb *WorkObjectBody) ProtoEncode() (*ProtoWorkObjectBody, error) {
 	}, nil
 }
 
-func (wb *WorkObjectBody) ProtoDecode(data *ProtoWorkObjectBody, location common.Location) error {
+func (wb *WorkObjectBody) ProtoDecode(data *ProtoWorkObjectBody) error {
 	header := new(ProtoHeader)
 	err := wb.header.ProtoDecode(header)
 	if err != nil {
 		return err
 	}
+	location := wb.header.Location()
 	wb.transactions = Transactions{}
 	err = wb.transactions.ProtoDecode(data.GetTransactions(), location)
 	if err != nil {
@@ -678,6 +752,18 @@ func (wb *WorkObjectBody) ProtoDecode(data *ProtoWorkObjectBody, location common
 
 	return nil
 }
+
+func (wb *WorkObjectBody) RPCMarshalWorkObjectBody() map[string]interface{} {
+	result := map[string]interface{}{
+		"header":          wb.Header(),
+		"transactions":    wb.Transactions(),
+		"extTransactions": wb.ExtTransactions(),
+		"uncles":          wb.Uncles(),
+		"manifest":        wb.Manifest(),
+	}
+	return result
+}
+
 func (wb *WorkObjectBody) QiTransactions() []*Transaction {
 	// TODO: cache the UTXO loop
 	qiTxs := make([]*Transaction, 0)

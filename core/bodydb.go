@@ -137,7 +137,7 @@ func (bc *BodyDb) ProcessingState() bool {
 func (bc *BodyDb) WriteBlock(block *types.WorkObject) {
 	// add the block to the cache as well
 	bc.blockCache.Add(block.Hash(), block)
-	rawdb.WriteWorkObject(bc.db, block.Hash(), *block)
+	rawdb.WriteWorkObject(bc.db, block.Hash(), *block, types.BlockObject)
 }
 
 // HasBlock checks if a block is fully present in the database or not.
@@ -164,7 +164,7 @@ func (bc *BodyDb) GetBlock(hash common.Hash, number uint64) *types.WorkObject {
 	if block, ok := bc.blockCache.Get(hash); ok {
 		return block.(*types.WorkObject)
 	}
-	block := rawdb.ReadWorkObject(bc.db, hash, bc.NodeLocation())
+	block := rawdb.ReadWorkObject(bc.db, hash, types.BlockObject)
 	if block == nil {
 		return nil
 	}
@@ -184,7 +184,7 @@ func (bc *BodyDb) GetWorkObject(hash common.Hash, number uint64) *types.WorkObje
 	if wo, ok := bc.woCache.Get(hash); ok {
 		return wo.(*types.WorkObject)
 	}
-	wo := rawdb.ReadWorkObject(bc.db, hash, bc.NodeLocation())
+	wo := rawdb.ReadWorkObject(bc.db, hash, types.BlockObject)
 	if wo == nil {
 		return nil
 	}
@@ -200,7 +200,7 @@ func (bc *BodyDb) GetUtxo(hash common.Hash, index uint32) *types.UtxoEntry {
 // GetBlockOrCandidate retrieves any known block from the database by hash and number,
 // caching it if found.
 func (bc *BodyDb) GetBlockOrCandidate(hash common.Hash, number uint64) *types.WorkObject {
-	block := rawdb.ReadWorkObject(bc.db, hash, bc.NodeLocation())
+	block := rawdb.ReadWorkObject(bc.db, hash, types.BlockObject)
 	if block == nil {
 		return nil
 	}

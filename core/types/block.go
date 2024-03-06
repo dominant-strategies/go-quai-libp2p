@@ -158,7 +158,7 @@ type extheader struct {
 }
 
 // Construct an empty header
-func EmptyHeader() *Header {
+func EmptyHeader() *WorkObject {
 	h := &Header{}
 	h.parentHash = make([]common.Hash, common.HierarchyDepth)
 	h.manifestHash = make([]common.Hash, common.HierarchyDepth)
@@ -182,7 +182,7 @@ func EmptyHeader() *Header {
 		h.parentDeltaS[i] = big.NewInt(0)
 		h.number[i] = big.NewInt(0)
 	}
-	return h
+	return NewWorkObjectWithHeader(h, Transaction{})
 }
 
 // DecodeRLP decodes the Quai header format into h.
@@ -936,20 +936,25 @@ func CopyHeader(h *Header) *Header {
 
 // PendingHeader stores the header and termini value associated with the header.
 type PendingHeader struct {
-	header  *Header `json:"header"`
-	termini Termini `json:"termini"`
+	wo      *WorkObject `json:"wo"`
+	termini Termini     `json:"termini"`
 }
 
 // accessor methods for pending header
 func (ph PendingHeader) Header() *Header {
-	return ph.header
+	return ph.wo.woBody.header
 }
+
+func (ph PendingHeader) WorkObject() *WorkObject {
+	return ph.wo
+}
+
 func (ph PendingHeader) Termini() Termini {
 	return ph.termini
 }
 
-func (ph *PendingHeader) SetHeader(header *Header) {
-	ph.header = CopyHeader(header)
+func (ph *PendingHeader) SetHeader(header *WorkObject) {
+	ph.wo.SetHeader(header.Header())
 }
 
 func (ph *PendingHeader) SetTermini(termini Termini) {
@@ -962,37 +967,38 @@ func EmptyPendingHeader() PendingHeader {
 	return pendingHeader
 }
 
-func NewPendingHeader(header *Header, termini Termini) PendingHeader {
+func NewPendingHeader(wo *WorkObject, termini Termini) PendingHeader {
 	emptyPh := EmptyPendingHeader()
-	emptyPh.SetHeader(header)
+	emptyPh.wo = wo.CopyWorkObject()
+	emptyPh.wo.SetHeader(CopyHeader(wo.woBody.Header()))
 	emptyPh.SetTermini(termini)
 	return emptyPh
 }
 
 func CopyPendingHeader(ph *PendingHeader) *PendingHeader {
 	cpy := *ph
-	cpy.SetHeader(CopyHeader(ph.Header()))
+	cpy.SetHeader(ph.wo.CopyWorkObject())
 	cpy.SetTermini(CopyTermini(ph.Termini()))
 	return &cpy
 }
 
 // ProtoEncode serializes h into the Quai Proto PendingHeader format
 func (ph PendingHeader) ProtoEncode() (*ProtoPendingHeader, error) {
-	protoHeader, err := ph.Header().ProtoEncode()
+	protoWorkObject, err := ph.wo.ProtoEncode()
 	if err != nil {
 		return nil, err
 	}
 	protoTermini := ph.Termini().ProtoEncode()
 	return &ProtoPendingHeader{
-		Header:  protoHeader,
+		Wo:      protoWorkObject,
 		Termini: protoTermini,
 	}, nil
 }
 
 // ProtoEncode deserializes the ProtoHeader into the Header format
 func (ph *PendingHeader) ProtoDecode(protoPendingHeader *ProtoPendingHeader) error {
-	ph.header = &Header{}
-	err := ph.header.ProtoDecode(protoPendingHeader.GetHeader())
+	ph.wo = &WorkObject{}
+	err := ph.wo.ProtoDecode(protoPendingHeader.Wo)
 	if err != nil {
 		return err
 	}
@@ -1006,7 +1012,7 @@ func (ph *PendingHeader) ProtoDecode(protoPendingHeader *ProtoPendingHeader) err
 
 // "external" pending header encoding. used for rlp
 type extPendingHeader struct {
-	Header  *Header
+	Wo      *WorkObject
 	Termini Termini
 }
 
@@ -1024,14 +1030,14 @@ func (p *PendingHeader) DecodeRLP(s *rlp.Stream) error {
 	if err := s.Decode(&eb); err != nil {
 		return err
 	}
-	p.header, p.termini = eb.Header, eb.Termini
+	p.wo, p.termini = eb.Wo, eb.Termini
 	return nil
 }
 
 // EncodeRLP serializes b into the Quai RLP format.
 func (p PendingHeader) EncodeRLP(w io.Writer) error {
 	return rlp.Encode(w, extPendingHeader{
-		Header:  p.header,
+		Wo:      p.wo,
 		Termini: p.termini,
 	})
 }

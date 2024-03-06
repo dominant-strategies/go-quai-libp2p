@@ -278,7 +278,7 @@ func (g *Genesis) ToBlock(db ethdb.Database) *types.WorkObject {
 		head.SetParentHash(common.Hash{}, i)
 	}
 
-	return types.NewWorkObjectWithHeader(head, types.Transaction{})
+	return types.NewWorkObjectWithHeader(head.Header(), types.Transaction{})
 }
 
 // Commit writes the block and state of a genesis specification to the database.
@@ -294,7 +294,7 @@ func (g *Genesis) Commit(db ethdb.Database, nodeLocation common.Location) (*type
 		config = params.AllProgpowProtocolChanges
 	}
 	rawdb.WriteTermini(db, block.Hash(), types.EmptyTermini())
-	rawdb.WriteWorkObject(db, block.Hash(), *block)
+	rawdb.WriteWorkObject(db, block.Hash(), *block, types.BlockObject)
 	rawdb.WriteReceipts(db, block.Hash(), block.NumberU64(nodeCtx), nil)
 	rawdb.WriteCanonicalHash(db, block.Hash(), block.NumberU64(nodeCtx))
 	rawdb.WriteHeadBlockHash(db, block.Hash())

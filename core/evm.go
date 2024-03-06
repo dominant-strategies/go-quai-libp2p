@@ -33,7 +33,7 @@ type ChainContext interface {
 	Engine() consensus.Engine
 
 	// GetHeader returns the hash corresponding to their hash.
-	GetHeader(common.Hash, uint64) *types.Header
+	GetHeader(common.Hash, uint64) *types.WorkObject
 
 	// NodeCtx returns the context of the running node
 	NodeCtx() int
