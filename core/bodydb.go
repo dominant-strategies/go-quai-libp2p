@@ -134,10 +134,10 @@ func (bc *BodyDb) ProcessingState() bool {
 }
 
 // WriteBlock write the block to the bodydb database
-func (bc *BodyDb) WriteBlock(block *types.WorkObject) {
+func (bc *BodyDb) WriteBlock(block *types.WorkObject, nodeCtx int) {
 	// add the block to the cache as well
 	bc.blockCache.Add(block.Hash(), block)
-	rawdb.WriteWorkObject(bc.db, block.Hash(), *block, types.BlockObject)
+	rawdb.WriteWorkObject(bc.db, block.Hash(), *block, types.BlockObject, nodeCtx)
 }
 
 // HasBlock checks if a block is fully present in the database or not.

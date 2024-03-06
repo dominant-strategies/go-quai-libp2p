@@ -826,7 +826,7 @@ func (hc *HeaderChain) GetAncestor(hash common.Hash, number, ancestor uint64, ma
 }
 
 func (hc *HeaderChain) WriteBlock(block *types.WorkObject) {
-	hc.bc.WriteBlock(block)
+	hc.bc.WriteBlock(block, hc.NodeCtx())
 }
 
 // GetHeader retrieves a block header from the database by hash and number,

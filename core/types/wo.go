@@ -2,6 +2,7 @@ package types
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"math/big"
 	"sync/atomic"
@@ -69,7 +70,8 @@ func (wo *WorkObject) Body() *WorkObjectBody {
 }
 
 func (wo *WorkObject) Hash() common.Hash {
-	return wo.woHeader.Hash()
+	fmt.Println("wo:", wo)
+	return wo.woBody.Header().Hash()
 }
 
 func (wo *WorkObject) SealHash() common.Hash {
@@ -626,6 +628,14 @@ func (wb *WorkObjectBody) SetHeader(header *Header) {
 	wb.header = header
 }
 
+func (wb *WorkObjectBody) NumberU64(args ...int) uint64 {
+	if len(args) > 0 {
+		return wb.Header().Number(args[0]).Uint64()
+	} else {
+		return wb.header.NumberU64(common.ZONE_CTX)
+	}
+}
+
 func (wb *WorkObjectBody) SetTransactions(transactions Transactions) {
 	wb.transactions = transactions
 }
@@ -741,8 +751,8 @@ func (wb *WorkObjectBody) ProtoEncode() (*ProtoWorkObjectBody, error) {
 }
 
 func (wb *WorkObjectBody) ProtoDecode(data *ProtoWorkObjectBody) error {
-	header := new(ProtoHeader)
-	err := wb.header.ProtoDecode(header)
+	wb.header = &Header{}
+	err := wb.header.ProtoDecode(data.GetHeader())
 	if err != nil {
 		return err
 	}
@@ -757,7 +767,20 @@ func (wb *WorkObjectBody) ProtoDecode(data *ProtoWorkObjectBody) error {
 	if err != nil {
 		return err
 	}
-	wb.uncles = []*WorkObject{}
+	wb.uncles = make([]*WorkObject, len(data.GetUncles().GetWorkObjects()))
+	for i, protoUncle := range data.GetUncles().GetWorkObjects() {
+		uncle := &WorkObject{}
+		err = uncle.ProtoDecode(protoUncle)
+		if err != nil {
+			return err
+		}
+		wb.uncles[i] = uncle
+	}
+	wb.manifest = BlockManifest{}
+	err = wb.manifest.ProtoDecode(data.GetManifest())
+	if err != nil {
+		return err
+	}
 
 	return nil
 }

@@ -294,7 +294,7 @@ func (g *Genesis) Commit(db ethdb.Database, nodeLocation common.Location) (*type
 		config = params.AllProgpowProtocolChanges
 	}
 	rawdb.WriteTermini(db, block.Hash(), types.EmptyTermini())
-	rawdb.WriteWorkObject(db, block.Hash(), *block, types.BlockObject)
+	rawdb.WriteWorkObject(db, block.Hash(), *block, types.BlockObject, nodeCtx)
 	rawdb.WriteReceipts(db, block.Hash(), block.NumberU64(nodeCtx), nil)
 	rawdb.WriteCanonicalHash(db, block.Hash(), block.NumberU64(nodeCtx))
 	rawdb.WriteHeadBlockHash(db, block.Hash())

@@ -644,7 +644,7 @@ func ReadWorkObjectHeader(db ethdb.Reader, hash common.Hash, woType int) *types.
 }
 
 // WriteWorkObjectHeader writes the work object header of the terminus hash.
-func WriteWorkObjectHeader(db ethdb.KeyValueWriter, hash common.Hash, workObjectHeader types.WorkObjectHeader, woType int) {
+func WriteWorkObjectHeader(db ethdb.KeyValueWriter, hash common.Hash, workObjectHeader types.WorkObjectHeader, woType int, nodeCtx int) {
 	var key []byte
 	switch woType {
 	case types.BlockObject:
@@ -654,7 +654,10 @@ func WriteWorkObjectHeader(db ethdb.KeyValueWriter, hash common.Hash, workObject
 	case types.PhObject:
 		key = phWorkObjectHeaderKey(hash)
 	}
-	protoWorkObjectHeader, _ := workObjectHeader.ProtoEncode()
+	protoWorkObjectHeader, err := workObjectHeader.ProtoEncode()
+	if err != nil {
+		log.Global.WithField("err", err).Fatal("Failed to proto encode work object header")
+	}
 	data, err := proto.Marshal(protoWorkObjectHeader)
 	if err != nil {
 		log.Global.WithField("err", err).Fatal("Failed to proto Marshal work object header")
@@ -694,9 +697,9 @@ func ReadWorkObject(db ethdb.Reader, hash common.Hash, woType int) *types.WorkOb
 }
 
 // WriteWorkObject writes the work object of the terminus hash.
-func WriteWorkObject(db ethdb.KeyValueWriter, hash common.Hash, workObject types.WorkObject, woType int) {
-	WriteWorkObjectBody(db, hash, *workObject.Body(), woType)
-	WriteWorkObjectHeader(db, hash, *workObject.WorkObjectHeader(), woType)
+func WriteWorkObject(db ethdb.KeyValueWriter, hash common.Hash, workObject types.WorkObject, woType int, nodeCtx int) {
+	WriteWorkObjectBody(db, hash, *workObject.Body(), woType, nodeCtx)
+	WriteWorkObjectHeader(db, hash, *workObject.WorkObjectHeader(), woType, nodeCtx)
 	//TODO: mmtx transaction
 }
 
@@ -742,9 +745,11 @@ func ReadWorkObjectBody(db ethdb.Reader, hash common.Hash) *types.WorkObjectBody
 }
 
 // WriteWorkObjectBody writes the work object body of the terminus hash.
-func WriteWorkObjectBody(db ethdb.KeyValueWriter, hash common.Hash, workObjectBody types.WorkObjectBody, woType int) {
+func WriteWorkObjectBody(db ethdb.KeyValueWriter, hash common.Hash, workObjectBody types.WorkObjectBody, woType int, nodeCtx int) {
 
 	key := workObjectBodyKey(hash)
+	WriteHeaderNumber(db, hash, workObjectBody.NumberU64(nodeCtx))
+
 	protoWorkObjectBody, err := workObjectBody.ProtoEncode()
 	if err != nil {
 		log.Global.WithField("err", err).Fatal("Failed to proto encode work object body")
