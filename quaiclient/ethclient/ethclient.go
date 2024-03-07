@@ -423,8 +423,8 @@ func (ec *Client) PendingTransactionCount(ctx context.Context) (uint, error) {
 }
 
 // GetPendingHeader gets the latest pending header from the chain.
-func (ec *Client) GetPendingHeader(ctx context.Context) (*types.Header, error) {
-	var pendingHeader *types.Header
+func (ec *Client) GetPendingHeader(ctx context.Context) (*types.WorkObject, error) {
+	var pendingHeader *types.WorkObject
 	err := ec.c.CallContext(ctx, &pendingHeader, "quai_getPendingHeader")
 	if err != nil {
 		return nil, err

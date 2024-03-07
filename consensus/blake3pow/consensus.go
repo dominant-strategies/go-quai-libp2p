@@ -459,6 +459,8 @@ func (blake3pow *Blake3pow) Finalize(chain consensus.ChainHeaderReader, header *
 // uncle rewards, setting the final state and assembling the block.
 func (blake3pow *Blake3pow) FinalizeAndAssemble(chain consensus.ChainHeaderReader, woHeader *types.WorkObjectHeader, state *state.StateDB, txs []*types.Transaction, uncles []*types.WorkObject, etxs []*types.Transaction, subManifest types.BlockManifest, receipts []*types.Receipt) (*types.WorkObject, error) {
 	nodeCtx := blake3pow.config.NodeLocation.Context()
+	tempHash := woHeader.Hash()
+	fmt.Println("FinalizeAndAssemble: ", tempHash.String(), "genesisHash: ", chain.Config().GenesisHash.String())
 	header := chain.GetHeaderByHash(woHeader.Hash())
 	if header == nil {
 		return nil, consensus.ErrUnknownAncestor

@@ -629,12 +629,14 @@ func (sl *Slice) readPhCache(hash common.Hash) (types.PendingHeader, bool) {
 
 // Write the phCache
 func (sl *Slice) writePhCache(hash common.Hash, pendingHeader types.PendingHeader) {
+	fmt.Println("write phcache:", hash, "ph", pendingHeader)
 	sl.phCache.Add(hash, pendingHeader)
 	rawdb.WritePendingHeader(sl.sliceDb, hash, pendingHeader)
 }
 
 // WriteBestPhKey writes the sl.bestPhKey
 func (sl *Slice) WriteBestPhKey(hash common.Hash) {
+	fmt.Println("write bestphkey:", hash)
 	sl.bestPhKey = hash
 	// write the ph head hash to the db.
 	rawdb.WriteBestPhKey(sl.sliceDb, hash)
@@ -811,6 +813,7 @@ func (sl *Slice) poem(externS *big.Int, currentS *big.Int) bool {
 
 // GetPendingHeader is used by the miner to request the current pending header
 func (sl *Slice) GetPendingHeader() (*types.WorkObjectHeader, error) {
+	fmt.Println("GetPendingHeader:", sl.bestPhKey, "len", sl.phCache.Len())
 	if ph, exists := sl.readPhCache(sl.bestPhKey); exists {
 		newWorkObject := &types.WorkObjectHeader{}
 		newWorkObject.SetHeaderHash(ph.Header().Hash())
@@ -1195,11 +1198,11 @@ func (sl *Slice) init(genesis *Genesis) error {
 		sl.hc.currentStateHeader.Store(genesisHeader)
 		// Create empty pending ETX entry for genesis block -- genesis may not emit ETXs
 		emptyPendingEtxs := types.Transactions{}
-		err := sl.hc.AddPendingEtxs(types.PendingEtxs{genesisHeader.Header(), emptyPendingEtxs})
+		err := sl.hc.AddPendingEtxs(types.PendingEtxs{Header: genesisHeader.Header(), Etxs: emptyPendingEtxs})
 		if err != nil {
 			return err
 		}
-		err = sl.AddPendingEtxsRollup(types.PendingEtxsRollup{genesisHeader.Header(), emptyPendingEtxs})
+		err = sl.AddPendingEtxsRollup(types.PendingEtxsRollup{Header: genesisHeader.Header(), EtxsRollup: emptyPendingEtxs})
 		if err != nil {
 			return err
 		}
