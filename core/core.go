@@ -74,6 +74,8 @@ type Core struct {
 
 	syncTarget *types.Header // sync target header decided based on Best Prime Block as the target to sync to
 
+	snapSyncFeed event.Feed // Snap sync feed
+
 	normalListBackoff uint64 // normalListBackoff is the multiple on c_normalListProcCounter which delays the proc on normal list
 
 	quit chan struct{} // core quit channel
@@ -394,7 +396,7 @@ func (c *Core) addToQueueIfNotAppended(block *types.Block) {
 
 // SetSyncTarget sets the sync target entropy based on the prime blocks
 func (c *Core) SetSyncTarget(header *types.Header) {
-	if c.sl.subClients == nil || header.Hash() == c.sl.config.GenesisHash {
+	if c.sl.subClients == nil || header.Hash() == c.sl.config.GenesisHash || header == nil {
 		return
 	}
 
@@ -408,10 +410,8 @@ func (c *Core) SetSyncTarget(header *types.Header) {
 	nodeCtx := c.NodeLocation().Context()
 	// Set Sync Target for subs
 	if nodeCtx != common.ZONE_CTX {
-		if header != nil {
-			if c.sl.subClients[header.Location().SubIndex(nodeLocation)] != nil {
-				c.sl.subClients[header.Location().SubIndex(nodeLocation)].SetSyncTarget(context.Background(), header)
-			}
+		if subClient := c.sl.subClients[header.Location().SubIndex(nodeLocation)]; subClient != nil {
+			subClient.SetSyncTarget(context.Background(), header)
 		}
 	}
 	if c.syncTarget == nil || c.syncTarget.ParentEntropy(nodeCtx).Cmp(header.ParentEntropy(nodeCtx)) < 0 {
@@ -430,6 +430,17 @@ func (c *Core) SyncTargetEntropy() (*big.Int, *big.Int) {
 		target := new(big.Int).Div(common.Big2e256, c.CurrentHeader().Difficulty())
 		zoneThresholdS := c.sl.engine.IntrinsicLogS(common.BytesToHash(target.Bytes()))
 		return c.CurrentHeader().ParentEntropy(c.NodeCtx()), zoneThresholdS
+	}
+}
+
+// TriggerSnapSync triggers snap sync at the zone level
+func (c *Core) TriggerSnapSync(header *types.Header) {
+	if nodeCtx := c.NodeLocation().Context(); nodeCtx != common.ZONE_CTX {
+		for _, subClient := range c.sl.subClients {
+			subClient.TriggerSnapSync(context.Background(), header)
+		}
+	} else {
+		c.triggerSnapSyncStart(header.Number(c.sl.NodeCtx()).Uint64())
 	}
 }
 
@@ -625,8 +636,15 @@ func (c *Core) WriteBlock(block *types.Block) {
 	if nodeCtx == common.PRIME_CTX {
 		if block != nil {
 			c.SetSyncTarget(block.Header())
+			if c.shouldStartSnapSync(block) {
+				c.TriggerSnapSync(block.Header())
+			}
 		}
 	}
+}
+
+func (c *Core) shouldStartSnapSync(block *types.Block) bool {
+	panic("TODO: implement")
 }
 
 func (c *Core) Append(header *types.Header, manifest types.BlockManifest, domPendingHeader *types.Header, domTerminus common.Hash, domOrigin bool, newInboundEtxs types.Transactions) (types.Transactions, bool, bool, error) {
@@ -958,6 +976,16 @@ func (c *Core) SubscribeLogsEvent(ch chan<- []*types.Log) event.Subscription {
 // block processing has started while false means it has stopped.
 func (c *Core) SubscribeBlockProcessingEvent(ch chan<- bool) event.Subscription {
 	return c.sl.hc.bc.SubscribeBlockProcessingEvent(ch)
+}
+
+// SubscribeSnapSyncStartEvent returns a subscription to snap sync start events.
+func (c *Core) SubscribeSnapSyncStartEvent(ch chan<- SnapSyncStartEvent) event.Subscription {
+	return c.snapSyncFeed.Subscribe(ch)
+}
+
+// triggerSnapSyncStart sends a snap sync start event to all subscribers.
+func (c *Core) triggerSnapSyncStart(blockNumber uint64) {
+	c.snapSyncFeed.Send(SnapSyncStartEvent{BlockNumber: blockNumber})
 }
 
 // Export writes the active chain to the given writer.
