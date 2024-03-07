@@ -629,7 +629,7 @@ func (sl *Slice) readPhCache(hash common.Hash) (types.PendingHeader, bool) {
 
 // Write the phCache
 func (sl *Slice) writePhCache(hash common.Hash, pendingHeader types.PendingHeader) {
-	fmt.Println("write phcache:", hash, "ph", pendingHeader)
+	fmt.Println("write phcache:", hash, "ph", pendingHeader, "nodeCtx:", sl.NodeCtx())
 	sl.phCache.Add(hash, pendingHeader)
 	rawdb.WritePendingHeader(sl.sliceDb, hash, pendingHeader)
 }
@@ -656,7 +656,7 @@ func (sl *Slice) generateSlicePendingHeader(block *types.WorkObject, newTermini 
 	} else {
 		// Just compute the necessary information for the pending Header
 		// i.e ParentHash field, Number and writing manifest to the disk
-		localPendingHeader = types.EmptyHeader()
+		localPendingHeader = types.EmptyHeader(sl.NodeCtx())
 		localPendingHeader.SetParentHash(block.Hash(), nodeCtx)
 		localPendingHeader.SetNumber(big.NewInt(int64(block.NumberU64(nodeCtx))+1), nodeCtx)
 		localPendingHeader.SetParentEntropy(sl.engine.TotalLogS(block), nodeCtx)
@@ -1249,7 +1249,7 @@ func (sl *Slice) ConstructLocalBlock(header *types.WorkObject) (*types.WorkObjec
 	for i, blockHash := range pendingBlockBody.SubManifest {
 		subManifest[i] = blockHash
 	}
-	block := types.NewWorkObjectWithHeader(header.Header(), &types.Transaction{})
+	block := types.NewWorkObjectWithHeader(header.Header(), &types.Transaction{}, sl.NodeCtx())
 	if err := sl.validator.ValidateBody(block); err != nil {
 		return block, err
 	} else {
@@ -1395,7 +1395,7 @@ func (sl *Slice) NewGenesisPendingHeader(domPendingHeader *types.WorkObject) {
 	}
 	if sl.hc.Empty() {
 		domPendingHeader.SetTime(uint64(time.Now().Unix()))
-		sl.phCache.Add(sl.config.GenesisHash, types.NewPendingHeader(domPendingHeader, genesisTermini))
+		sl.writePhCache(sl.config.GenesisHash, types.NewPendingHeader(domPendingHeader, genesisTermini))
 	}
 }
 

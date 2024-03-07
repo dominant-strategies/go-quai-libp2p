@@ -308,7 +308,7 @@ func (s *PublicBlockChainQuaiAPI) GetUncleByBlockNumberAndIndex(ctx context.Cont
 			}).Debug("Requested uncle not found")
 			return nil, nil
 		}
-		block = types.NewWorkObjectWithHeader(uncles[index].Header(), &types.Transaction{}) //TODO: mmtx add transaction
+		block = types.NewWorkObjectWithHeader(uncles[index].Header(), &types.Transaction{}, s.b.NodeCtx()) //TODO: mmtx add transaction
 		return s.rpcMarshalBlock(ctx, block, false, false)
 	}
 	return nil, err
@@ -328,7 +328,7 @@ func (s *PublicBlockChainQuaiAPI) GetUncleByBlockHashAndIndex(ctx context.Contex
 			}).Debug("Requested uncle not found")
 			return nil, nil
 		}
-		block = types.NewWorkObjectWithHeader(uncles[index].Header(), &types.Transaction{})
+		block = types.NewWorkObjectWithHeader(uncles[index].Header(), &types.Transaction{}, s.b.NodeCtx())
 		return s.rpcMarshalBlock(ctx, block, false, false)
 	}
 	pendBlock, _ := s.b.PendingBlockAndReceipts()
@@ -342,7 +342,7 @@ func (s *PublicBlockChainQuaiAPI) GetUncleByBlockHashAndIndex(ctx context.Contex
 			}).Debug("Requested uncle not found in pending block")
 			return nil, nil
 		}
-		block = types.NewWorkObjectWithHeader(uncles[index].Header(), &types.Transaction{})
+		block = types.NewWorkObjectWithHeader(uncles[index].Header(), &types.Transaction{}, s.b.NodeCtx())
 		return s.rpcMarshalBlock(ctx, block, false, false)
 	}
 	return nil, err
@@ -774,7 +774,7 @@ func (s *PublicBlockChainQuaiAPI) NewGenesisPendingHeader(ctx context.Context, r
 	if err := json.Unmarshal(raw, &pendingHeader); err != nil {
 		return
 	}
-	woBody := types.NewWorkObjectBody(pendingHeader.Header, nil, nil, nil, nil, nil, nil, 0)
+	woBody := types.NewWorkObjectBody(pendingHeader.Header, nil, nil, nil, nil, nil, nil, s.b.NodeCtx())
 
 	s.b.NewGenesisPendingHeader(types.NewWorkObject(pendingHeader.WoHeader, woBody, &types.Transaction{}))
 }

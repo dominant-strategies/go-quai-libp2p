@@ -566,7 +566,7 @@ func (w *worker) GeneratePendingHeader(wo *types.WorkObject, fill bool) (*types.
 	}
 
 	// Create a local environment copy, avoid the data race with snapshot state.
-	newWo, err := w.FinalizeAssemble(w.hc, work.wo.WorkObjectHeader(), wo, work.state, work.txs, work.unclelist(), work.etxs, work.subManifest, work.receipts)
+	newWo, err := w.FinalizeAssemble(w.hc, work.wo, wo, work.state, work.txs, work.unclelist(), work.etxs, work.subManifest, work.receipts)
 	if err != nil {
 		return nil, err
 	}
@@ -896,7 +896,7 @@ func (w *worker) prepareWork(genParams *generateParams, wo *types.WorkObject) (*
 	}
 	// Construct the sealing block header, set the extra field if it's allowed
 	num := parent.Header().Number(nodeCtx)
-	header := types.EmptyHeader()
+	header := types.EmptyHeader(nodeCtx)
 	header.SetParentHash(wo.Header().Hash(), nodeCtx)
 	header.SetNumber(big.NewInt(int64(num.Uint64())+1), nodeCtx)
 	header.SetTime(timestamp)
@@ -937,7 +937,8 @@ func (w *worker) prepareWork(genParams *generateParams, wo *types.WorkObject) (*
 			return nil, err
 		}
 		proposedWoHeader := types.NewWorkObjectHeader(header.Hash(), header.ParentHash(nodeCtx), header.Number(nodeCtx), header.Difficulty(), types.EmptyRootHash, header.Nonce(), header.Location())
-		proposedWo := types.NewWorkObject(proposedWoHeader, &types.WorkObjectBody{}, &types.Transaction{})
+		proposedWoBody := types.NewWorkObjectBody(header.Header(), nil, nil, nil, nil, nil, nil, nodeCtx)
+		proposedWo := types.NewWorkObject(proposedWoHeader, proposedWoBody, &types.Transaction{})
 		env, err := w.makeEnv(parent, proposedWo, w.coinbase)
 		if err != nil {
 			w.logger.WithField("err", err).Error("Failed to create sealing context")
@@ -1051,9 +1052,9 @@ func (w *worker) ComputeManifestHash(header *types.WorkObject) common.Hash {
 	return manifestHash
 }
 
-func (w *worker) FinalizeAssemble(chain consensus.ChainHeaderReader, woHeader *types.WorkObjectHeader, parent *types.WorkObject, state *state.StateDB, txs []*types.Transaction, uncles []*types.WorkObject, etxs []*types.Transaction, subManifest types.BlockManifest, receipts []*types.Receipt) (*types.WorkObject, error) {
+func (w *worker) FinalizeAssemble(chain consensus.ChainHeaderReader, header *types.WorkObject, parent *types.WorkObject, state *state.StateDB, txs []*types.Transaction, uncles []*types.WorkObject, etxs []*types.Transaction, subManifest types.BlockManifest, receipts []*types.Receipt) (*types.WorkObject, error) {
 	nodeCtx := w.hc.NodeCtx()
-	wo, err := w.engine.FinalizeAndAssemble(chain, woHeader, state, txs, uncles, etxs, subManifest, receipts)
+	wo, err := w.engine.FinalizeAndAssemble(chain, header, state, txs, uncles, etxs, subManifest, receipts)
 	if err != nil {
 		return nil, err
 	}

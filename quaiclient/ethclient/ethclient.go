@@ -164,7 +164,7 @@ func (ec *Client) getBlock(ctx context.Context, method string, args ...interface
 		}
 		txs[i] = tx.tx
 	}
-	return types.NewWorkObject(head.WorkObjectHeader(), types.NewWorkObjectBody(head.Header(), txs, etxs, uncles, manifest, nil, nil, 0), types.Transaction{}), nil //TODO: mmtx don't know nodeCtx
+	return types.NewWorkObject(head.WorkObjectHeader(), types.NewWorkObjectBody(head.Header(), txs, etxs, uncles, manifest, nil, nil, 0), &types.Transaction{}), nil //TODO: mmtx don't know nodeCtx
 }
 
 // HeaderByHash returns the block header with the given hash.

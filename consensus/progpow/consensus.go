@@ -17,7 +17,6 @@ import (
 	"github.com/dominant-strategies/go-quai/core/types"
 	"github.com/dominant-strategies/go-quai/log"
 	"github.com/dominant-strategies/go-quai/params"
-	"github.com/dominant-strategies/go-quai/trie"
 	"modernc.org/mathutil"
 )
 
@@ -494,20 +493,16 @@ func (progpow *Progpow) Finalize(chain consensus.ChainHeaderReader, header *type
 
 // FinalizeAndAssemble implements consensus.Engine, accumulating the block and
 // uncle rewards, setting the final state and assembling the block.
-func (progpow *Progpow) FinalizeAndAssemble(chain consensus.ChainHeaderReader, woHeader *types.WorkObjectHeader, state *state.StateDB, txs []*types.Transaction, uncles []*types.WorkObject, etxs []*types.Transaction, subManifest types.BlockManifest, receipts []*types.Receipt) (*types.WorkObject, error) {
+func (progpow *Progpow) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *types.WorkObject, state *state.StateDB, txs []*types.Transaction, uncles []*types.WorkObject, etxs []*types.Transaction, subManifest types.BlockManifest, receipts []*types.Receipt) (*types.WorkObject, error) {
 	nodeCtx := progpow.NodeLocation().Context()
-	header := chain.GetHeaderByHash(woHeader.Hash())
-	if header == nil {
-		return nil, consensus.ErrUnknownAncestor
-	}
+
 	if nodeCtx == common.ZONE_CTX && chain.ProcessingState() {
 		// Finalize block
 		progpow.Finalize(chain, header, state, txs, uncles)
 	}
 
 	// Header seems complete, assemble into a block and return
-	woBody := types.NewWorkObjectBody(header.Header(), txs, etxs, uncles, subManifest, receipts, trie.NewStackTrie(nil), nodeCtx)
-	return types.NewWorkObject(woHeader, woBody, &types.Transaction{}), nil
+	return types.NewWorkObject(header.WorkObjectHeader(), header.Body(), &types.Transaction{}), nil
 }
 
 func (progpow *Progpow) NodeLocation() common.Location {

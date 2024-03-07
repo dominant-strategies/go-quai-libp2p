@@ -158,7 +158,7 @@ type extheader struct {
 }
 
 // Construct an empty header
-func EmptyHeader() *WorkObject {
+func EmptyHeader(nodeCtx int) *WorkObject {
 	h := &Header{}
 	h.parentHash = make([]common.Hash, common.HierarchyDepth)
 	h.manifestHash = make([]common.Hash, common.HierarchyDepth)
@@ -182,7 +182,7 @@ func EmptyHeader() *WorkObject {
 		h.parentDeltaS[i] = big.NewInt(0)
 		h.number[i] = big.NewInt(0)
 	}
-	return NewWorkObjectWithHeader(h, &Transaction{})
+	return NewWorkObjectWithHeader(h, &Transaction{}, nodeCtx)
 }
 
 // DecodeRLP decodes the Quai header format into h.

@@ -107,7 +107,11 @@ func (wo *WorkObject) ParentHash(nodeCtx int) common.Hash {
 }
 
 func (wo *WorkObject) Number(nodeCtx int) *big.Int {
-	return wo.woBody.header.Number(nodeCtx)
+	if wo.woBody.header != nil {
+		return wo.woBody.header.Number(nodeCtx)
+	} else {
+		return wo.woHeader.number
+	}
 }
 
 func (wo *WorkObject) Difficulty() *big.Int {
@@ -208,6 +212,12 @@ func (wo *WorkObject) NumberArray() []*big.Int {
 
 func (wo *WorkObject) SetHeader(header *Header) {
 	wo.woBody.header = header
+	wo.woHeader.SetHeaderHash(header.Hash())
+	wo.woHeader.SetParentHash(header.ParentHash(common.ZONE_CTX))
+	wo.woHeader.SetNumber(header.Number(common.ZONE_CTX))
+	wo.woHeader.SetDifficulty(header.Difficulty())
+	wo.woHeader.SetTxHash(EmptyRootHash) //TODO: mmtx need this to be a real tx hash
+	wo.woHeader.SetLocation(header.Location())
 }
 
 func (wo *WorkObject) SetTransactions(transactions Transactions) {
@@ -238,6 +248,7 @@ func (wo *WorkObject) SetNumber(number *big.Int, nodeCtx int) {
 
 func (wo *WorkObject) SetDifficulty(difficulty *big.Int) {
 	wo.woHeader.difficulty = difficulty
+	wo.woBody.header.SetDifficulty(difficulty)
 }
 
 func (wo *WorkObject) SetTxHash(txHash common.Hash) {
@@ -358,25 +369,29 @@ func (wo *WorkObject) Size() common.StorageSize {
 }
 
 func NewWorkObject(woHeader *WorkObjectHeader, woBody *WorkObjectBody, tx *Transaction) *WorkObject {
-	return &WorkObject{
+	newWo := &WorkObject{
 		woHeader: woHeader,
 		woBody:   woBody,
 		tx:       tx,
 	}
+	newWo.SetHeader(woBody.Header())
+	return newWo
 }
 
-func NewWorkObjectWithHeader(header *Header, tx *Transaction) *WorkObject {
+func NewWorkObjectWithHeader(header *Header, tx *Transaction, nodeCtx int) *WorkObject {
 	woHeader := NewWorkObjectHeader(header.Hash(), header.ParentHash(common.ZONE_CTX), header.Number(common.ZONE_CTX), header.Difficulty(), header.TxHash(), header.Nonce(), header.Location())
-	woBody := NewWorkObjectBody(header, nil, nil, nil, nil, nil, nil, 0)
+	woBody := NewWorkObjectBody(header, nil, nil, nil, nil, nil, nil, nodeCtx)
 	return NewWorkObject(woHeader, woBody, tx)
 }
 
 func CopyWorkObject(wo *WorkObject) *WorkObject {
-	return &WorkObject{
+	newWo := &WorkObject{
 		woHeader: CopyWorkObjectHeader(wo.woHeader),
 		woBody:   CopyWorkObjectBody(wo.woBody),
 		tx:       wo.tx,
 	}
+	newWo.SetHeader(wo.Header())
+	return newWo
 }
 func (wo *WorkObject) RPCMarshalWorkObject() map[string]interface{} {
 	result := map[string]interface{}{
@@ -396,14 +411,14 @@ func (wo *WorkObject) ProtoEncode() (*ProtoWorkObject, error) {
 	if err != nil {
 		return nil, err
 	}
-	tx, err := wo.tx.ProtoEncode()
-	if err != nil {
-		return nil, err
-	}
+	// tx, err := wo.tx.ProtoEncode()
+	// if err != nil {
+	// 	return nil, err
+	// }
 	return &ProtoWorkObject{
 		WoHeader: header,
 		WoBody:   body,
-		Tx:       tx,
+		// Tx:       tx,
 	}, nil
 }
 
@@ -418,11 +433,11 @@ func (wo *WorkObject) ProtoDecode(data *ProtoWorkObject) error {
 	if err != nil {
 		return err
 	}
-	protoTx := new(ProtoTransaction)
-	err = wo.tx.ProtoDecode(protoTx, wo.woHeader.Location())
-	if err != nil {
-		return err
-	}
+	// protoTx := new(ProtoTransaction)
+	// err = wo.tx.ProtoDecode(protoTx, wo.woHeader.Location())
+	// if err != nil {
+	// 	return err
+	// }
 	return nil
 }
 
@@ -698,6 +713,7 @@ func NewWorkObjectBody(header *Header, txs []*Transaction, etxs []*Transaction, 
 		wb.manifest = make(BlockManifest, len(subManifest))
 		copy(wb.manifest, subManifest)
 	}
+	//fmt.Println("context:", nodeCtx, "subManifestHash", subManifestHash, "wb.Header().ManifestHash(nodeCtx+1)", wb.Header().ManifestHash(nodeCtx+1))
 	if nodeCtx < common.ZONE_CTX && subManifestHash != wb.Header().ManifestHash(nodeCtx+1) {
 		log.Global.Error("attempted to build block with invalid subordinate manifest")
 		return nil

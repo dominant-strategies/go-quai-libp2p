@@ -16,7 +16,6 @@ import (
 	"github.com/dominant-strategies/go-quai/core/types"
 	"github.com/dominant-strategies/go-quai/log"
 	"github.com/dominant-strategies/go-quai/params"
-	"github.com/dominant-strategies/go-quai/trie"
 	"modernc.org/mathutil"
 )
 
@@ -457,23 +456,15 @@ func (blake3pow *Blake3pow) Finalize(chain consensus.ChainHeaderReader, header *
 
 // FinalizeAndAssemble implements consensus.Engine, accumulating the block and
 // uncle rewards, setting the final state and assembling the block.
-func (blake3pow *Blake3pow) FinalizeAndAssemble(chain consensus.ChainHeaderReader, woHeader *types.WorkObjectHeader, state *state.StateDB, txs []*types.Transaction, uncles []*types.WorkObject, etxs []*types.Transaction, subManifest types.BlockManifest, receipts []*types.Receipt) (*types.WorkObject, error) {
+func (blake3pow *Blake3pow) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *types.WorkObject, state *state.StateDB, txs []*types.Transaction, uncles []*types.WorkObject, etxs []*types.Transaction, subManifest types.BlockManifest, receipts []*types.Receipt) (*types.WorkObject, error) {
 	nodeCtx := blake3pow.config.NodeLocation.Context()
-	tempHash := woHeader.Hash()
-	fmt.Println("FinalizeAndAssemble: ", tempHash.String(), "genesisHash: ", chain.Config().GenesisHash.String())
-	header := chain.GetHeaderByHash(woHeader.Hash())
-	if header == nil {
-		return nil, consensus.ErrUnknownAncestor
-	}
 	if nodeCtx == common.ZONE_CTX && chain.ProcessingState() {
 		// Finalize block
 		blake3pow.Finalize(chain, header, state, txs, uncles)
-		woHeader.SetHeaderHash(header.Hash())
 	}
 
 	// Header seems complete, assemble into a block and return
-	woBody := types.NewWorkObjectBody(header.Header(), txs, etxs, uncles, subManifest, receipts, trie.NewStackTrie(nil), nodeCtx)
-	return types.NewWorkObject(woHeader, woBody, &types.Transaction{}), nil
+	return types.NewWorkObject(header.WorkObjectHeader(), header.Body(), &types.Transaction{}), nil
 }
 
 func (blake3pow *Blake3pow) ComputePowLight(header *types.Header) (common.Hash, common.Hash) {

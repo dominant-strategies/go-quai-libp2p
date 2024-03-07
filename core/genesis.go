@@ -261,7 +261,7 @@ func (g *Genesis) configOrDefault(ghash common.Hash) *params.ChainConfig {
 // ToBlock creates the genesis block and writes state of a genesis specification
 // to the given database (or discards it if nil).
 func (g *Genesis) ToBlock(db ethdb.Database) *types.WorkObject {
-	head := types.EmptyHeader()
+	head := types.EmptyHeader(g.Config.Location.Context())
 	head.SetNonce(types.EncodeNonce(g.Nonce))
 	head.SetTime(g.Timestamp)
 	head.SetExtra(g.ExtraData)
@@ -278,7 +278,7 @@ func (g *Genesis) ToBlock(db ethdb.Database) *types.WorkObject {
 		head.SetParentHash(common.Hash{}, i)
 	}
 
-	return types.NewWorkObjectWithHeader(head.Header(), &types.Transaction{})
+	return types.NewWorkObjectWithHeader(head.Header(), &types.Transaction{}, g.Config.Location.Context())
 }
 
 // Commit writes the block and state of a genesis specification to the database.
