@@ -693,7 +693,7 @@ func ReadWorkObject(db ethdb.Reader, hash common.Hash, woType int) *types.WorkOb
 	if workObjectBody == nil {
 		return nil
 	}
-	return types.NewWorkObject(workObjectHeader, workObjectBody, types.Transaction{}) //TODO: mmtx transaction
+	return types.NewWorkObject(workObjectHeader, workObjectBody, &types.Transaction{}) //TODO: mmtx transaction
 }
 
 // WriteWorkObject writes the work object of the terminus hash.
@@ -1119,7 +1119,7 @@ func ReadBadWorkObject(db ethdb.Reader, hash common.Hash, location common.Locati
 	}
 	for _, bad := range *badWorkObjects {
 		if bad.woHeader.Hash() == hash {
-			return types.NewWorkObject(bad.woHeader, bad.woBody, types.Transaction{}) //TODO: mmtx transaction
+			return types.NewWorkObject(bad.woHeader, bad.woBody, &types.Transaction{}) //TODO: mmtx transaction
 		}
 	}
 	return nil
@@ -1146,7 +1146,7 @@ func ReadAllBadBlocks(db ethdb.Reader, location common.Location) []*types.WorkOb
 	}
 	var blocks []*types.WorkObject
 	for _, bad := range *badWorkObjects {
-		blocks = append(blocks, types.NewWorkObject(bad.woHeader, bad.woBody, types.Transaction{})) //TODO: mmtx transaction
+		blocks = append(blocks, types.NewWorkObject(bad.woHeader, bad.woBody, &types.Transaction{})) //TODO: mmtx transaction
 	}
 	return blocks
 }

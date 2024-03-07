@@ -16,9 +16,9 @@ import (
 )
 
 type WorkObject struct {
-	woHeader WorkObjectHeader
+	woHeader *WorkObjectHeader
 	woBody   *WorkObjectBody
-	tx       Transaction
+	tx       *Transaction
 
 	// caches
 	size       atomic.Value
@@ -62,7 +62,7 @@ func (wo *WorkObject) Header() *Header {
 }
 
 func (wo *WorkObject) WorkObjectHeader() *WorkObjectHeader {
-	return &wo.woHeader
+	return wo.woHeader
 }
 
 func (wo *WorkObject) Body() *WorkObjectBody {
@@ -71,7 +71,7 @@ func (wo *WorkObject) Body() *WorkObjectBody {
 
 func (wo *WorkObject) Hash() common.Hash {
 	fmt.Println("wo:", wo)
-	return wo.woBody.Header().Hash()
+	return wo.woHeader.Hash()
 }
 
 func (wo *WorkObject) SealHash() common.Hash {
@@ -126,7 +126,7 @@ func (wo *WorkObject) HeaderHash() common.Hash {
 	return wo.woHeader.headerHash
 }
 
-func (wo *WorkObject) Tx() Transaction {
+func (wo *WorkObject) Tx() *Transaction {
 	return wo.tx
 }
 
@@ -198,7 +198,7 @@ func (wo *WorkObject) UTXORoot() common.Hash {
 	return wo.woBody.header.UTXORoot()
 }
 
-func (wo *WorkObject) SetTx(tx Transaction) {
+func (wo *WorkObject) SetTx(tx *Transaction) {
 	wo.tx = tx
 }
 
@@ -253,6 +253,7 @@ func (wo *WorkObject) SetHeaderHash(headerHash common.Hash) {
 }
 
 func (wo *WorkObject) SetLocation(location common.Location) {
+	wo.woHeader.SetLocation(location)
 	wo.woBody.header.SetLocation(location)
 }
 
@@ -356,32 +357,32 @@ func (wo *WorkObject) Size() common.StorageSize {
 	return -1
 }
 
-func NewWorkObject(woHeader *WorkObjectHeader, woBody *WorkObjectBody, tx Transaction) *WorkObject {
+func NewWorkObject(woHeader *WorkObjectHeader, woBody *WorkObjectBody, tx *Transaction) *WorkObject {
 	return &WorkObject{
-		woHeader: *woHeader,
+		woHeader: woHeader,
 		woBody:   woBody,
 		tx:       tx,
 	}
 }
 
-func NewWorkObjectWithHeader(header *Header, tx Transaction) *WorkObject {
+func NewWorkObjectWithHeader(header *Header, tx *Transaction) *WorkObject {
 	woHeader := NewWorkObjectHeader(header.Hash(), header.ParentHash(common.ZONE_CTX), header.Number(common.ZONE_CTX), header.Difficulty(), header.TxHash(), header.Nonce(), header.Location())
 	woBody := NewWorkObjectBody(header, nil, nil, nil, nil, nil, nil, 0)
 	return NewWorkObject(woHeader, woBody, tx)
 }
 
-func (wo *WorkObject) CopyWorkObject() *WorkObject {
+func CopyWorkObject(wo *WorkObject) *WorkObject {
 	return &WorkObject{
-		woHeader: *wo.woHeader.CopyWorkObjectHeader(),
-		woBody:   wo.woBody.CopyWorkObjectBody(),
+		woHeader: CopyWorkObjectHeader(wo.woHeader),
+		woBody:   CopyWorkObjectBody(wo.woBody),
 		tx:       wo.tx,
 	}
 }
 func (wo *WorkObject) RPCMarshalWorkObject() map[string]interface{} {
 	result := map[string]interface{}{
-		"header": wo.woHeader.RPCMarshalWorkObjectHeader(),
-		"body":   wo.woBody.RPCMarshalWorkObjectBody(),
-		"tx":     wo.tx,
+		"woheader": wo.woHeader.RPCMarshalWorkObjectHeader(),
+		"header":   wo.woBody.Header().RPCMarshalHeader(),
+		// "tx":     wo.tx,
 	}
 	return result
 }
@@ -497,7 +498,7 @@ func NewWorkObjectHeader(headerHash common.Hash, parentHash common.Hash, number 
 	}
 }
 
-func (wh *WorkObjectHeader) CopyWorkObjectHeader() *WorkObjectHeader {
+func CopyWorkObjectHeader(wh *WorkObjectHeader) *WorkObjectHeader {
 	cpy := *wh
 	cpy.SetHeaderHash(wh.HeaderHash())
 	cpy.SetParentHash(wh.ParentHash())
@@ -511,13 +512,13 @@ func (wh *WorkObjectHeader) CopyWorkObjectHeader() *WorkObjectHeader {
 
 func (wh *WorkObjectHeader) RPCMarshalWorkObjectHeader() map[string]interface{} {
 	result := map[string]interface{}{
-		"headerHash": wh.HeaderHash(),
-		"parentHash": wh.ParentHash(),
-		"number":     (*hexutil.Big)(wh.Number()),
-		"difficulty": (*hexutil.Big)(wh.Difficulty()),
-		"nonce":      wh.Nonce(),
-		"location":   wh.Location(),
-		"txHash":     wh.TxHash(),
+		"woheaderHash": wh.HeaderHash(),
+		"woparentHash": wh.ParentHash(),
+		"wonumber":     (*hexutil.Big)(wh.Number()),
+		"wodifficulty": (*hexutil.Big)(wh.Difficulty()),
+		"wononce":      wh.Nonce(),
+		"wolocation":   wh.Location(),
+		"wotxHash":     wh.TxHash(),
 	}
 	return result
 }
@@ -676,7 +677,7 @@ func NewWorkObjectBody(header *Header, txs []*Transaction, etxs []*Transaction, 
 		wb.header.SetUncleHash(CalcUncleHash(uncles))
 		wb.uncles = make([]*WorkObject, len(uncles))
 		for i := range uncles {
-			wb.uncles[i] = uncles[i].CopyWorkObject()
+			wb.uncles[i] = CopyWorkObject(uncles[i])
 		}
 	}
 
@@ -705,9 +706,10 @@ func NewWorkObjectBody(header *Header, txs []*Transaction, etxs []*Transaction, 
 	return wb
 }
 
-func (wb *WorkObjectBody) CopyWorkObjectBody() *WorkObjectBody {
+func CopyWorkObjectBody(wb *WorkObjectBody) *WorkObjectBody {
 	cpy := *wb
 	cpy.SetHeader(CopyHeader(wb.Header()))
+	// TODO: Have to copy other fields
 	return &cpy
 }
 

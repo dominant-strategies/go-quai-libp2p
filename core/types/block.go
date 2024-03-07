@@ -182,7 +182,7 @@ func EmptyHeader() *WorkObject {
 		h.parentDeltaS[i] = big.NewInt(0)
 		h.number[i] = big.NewInt(0)
 	}
-	return NewWorkObjectWithHeader(h, Transaction{})
+	return NewWorkObjectWithHeader(h, &Transaction{})
 }
 
 // DecodeRLP decodes the Quai header format into h.
@@ -969,7 +969,7 @@ func EmptyPendingHeader() PendingHeader {
 
 func NewPendingHeader(wo *WorkObject, termini Termini) PendingHeader {
 	emptyPh := EmptyPendingHeader()
-	emptyPh.wo = wo.CopyWorkObject()
+	emptyPh.wo = CopyWorkObject(wo)
 	emptyPh.wo.SetHeader(CopyHeader(wo.woBody.Header()))
 	emptyPh.SetTermini(termini)
 	return emptyPh
@@ -977,7 +977,7 @@ func NewPendingHeader(wo *WorkObject, termini Termini) PendingHeader {
 
 func CopyPendingHeader(ph *PendingHeader) *PendingHeader {
 	cpy := *ph
-	cpy.SetHeader(ph.wo.CopyWorkObject())
+	cpy.SetHeader(CopyWorkObject(ph.wo))
 	cpy.SetTermini(CopyTermini(ph.Termini()))
 	return &cpy
 }

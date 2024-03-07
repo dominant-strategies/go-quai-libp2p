@@ -90,7 +90,7 @@ func (env *environment) copy(processingState bool, nodeCtx int) *environment {
 			coinbase:  env.coinbase,
 			etxRLimit: env.etxRLimit,
 			etxPLimit: env.etxPLimit,
-			wo:        env.wo.CopyWorkObject(),
+			wo:        types.CopyWorkObject(env.wo),
 			receipts:  copyReceipts(env.receipts),
 			utxoFees:  new(big.Int).Set(env.utxoFees),
 		}
@@ -113,7 +113,7 @@ func (env *environment) copy(processingState bool, nodeCtx int) *environment {
 		env.uncleMu.Unlock()
 		return cpy
 	} else {
-		return &environment{wo: env.wo.CopyWorkObject()}
+		return &environment{wo: types.CopyWorkObject(env.wo)}
 	}
 }
 
@@ -645,7 +645,7 @@ func (w *worker) makeEnv(parent *types.WorkObject, proposedWo *types.WorkObject,
 	}
 	// Note the passed coinbase may be different with header.Coinbase.
 	env := &environment{
-		signer:    types.MakeSigner(w.chainConfig, proposedWo.Header().Number(w.hc.NodeCtx())),
+		signer:    types.MakeSigner(w.chainConfig, proposedWo.Number(w.hc.NodeCtx())),
 		state:     state,
 		coinbase:  coinbase,
 		ancestors: mapset.NewSet(),
@@ -937,7 +937,7 @@ func (w *worker) prepareWork(genParams *generateParams, wo *types.WorkObject) (*
 			return nil, err
 		}
 		proposedWoHeader := types.NewWorkObjectHeader(header.Hash(), header.ParentHash(nodeCtx), header.Number(nodeCtx), header.Difficulty(), types.EmptyRootHash, header.Nonce(), header.Location())
-		proposedWo := types.NewWorkObject(proposedWoHeader, &types.WorkObjectBody{}, types.Transaction{})
+		proposedWo := types.NewWorkObject(proposedWoHeader, &types.WorkObjectBody{}, &types.Transaction{})
 		env, err := w.makeEnv(parent, proposedWo, w.coinbase)
 		if err != nil {
 			w.logger.WithField("err", err).Error("Failed to create sealing context")

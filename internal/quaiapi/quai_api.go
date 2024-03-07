@@ -308,7 +308,7 @@ func (s *PublicBlockChainQuaiAPI) GetUncleByBlockNumberAndIndex(ctx context.Cont
 			}).Debug("Requested uncle not found")
 			return nil, nil
 		}
-		block = types.NewWorkObjectWithHeader(uncles[index].Header(), types.Transaction{}) //TODO: mmtx add transaction
+		block = types.NewWorkObjectWithHeader(uncles[index].Header(), &types.Transaction{}) //TODO: mmtx add transaction
 		return s.rpcMarshalBlock(ctx, block, false, false)
 	}
 	return nil, err
@@ -328,7 +328,7 @@ func (s *PublicBlockChainQuaiAPI) GetUncleByBlockHashAndIndex(ctx context.Contex
 			}).Debug("Requested uncle not found")
 			return nil, nil
 		}
-		block = types.NewWorkObjectWithHeader(uncles[index].Header(), types.Transaction{})
+		block = types.NewWorkObjectWithHeader(uncles[index].Header(), &types.Transaction{})
 		return s.rpcMarshalBlock(ctx, block, false, false)
 	}
 	pendBlock, _ := s.b.PendingBlockAndReceipts()
@@ -342,7 +342,7 @@ func (s *PublicBlockChainQuaiAPI) GetUncleByBlockHashAndIndex(ctx context.Contex
 			}).Debug("Requested uncle not found in pending block")
 			return nil, nil
 		}
-		block = types.NewWorkObjectWithHeader(uncles[index].Header(), types.Transaction{})
+		block = types.NewWorkObjectWithHeader(uncles[index].Header(), &types.Transaction{})
 		return s.rpcMarshalBlock(ctx, block, false, false)
 	}
 	return nil, err
@@ -622,7 +622,7 @@ func (s *PublicBlockChainQuaiAPI) fillSubordinateManifest(b *types.WorkObject) (
 		if subManifest == nil || b.ManifestHash(nodeCtx+1) != types.DeriveSha(subManifest, trie.NewStackTrie(nil)) {
 			return nil, errors.New("reconstructed sub manifest does not match manifest hash")
 		}
-		return types.NewWorkObject(b.WorkObjectHeader(), types.NewWorkObjectBody(b.Header(), b.Transactions(), b.ExtTransactions(), b.Uncles(), subManifest, nil, nil, nodeCtx), types.Transaction{}), nil
+		return types.NewWorkObject(b.WorkObjectHeader(), types.NewWorkObjectBody(b.Header(), b.Transactions(), b.ExtTransactions(), b.Uncles(), subManifest, nil, nil, nodeCtx), &types.Transaction{}), nil
 		//return types.NewBlockWithHeader(b.Header()).WithBody(b.Transactions(), b.Uncles(), b.ExtTransactions(), subManifest), nil
 	}
 }
@@ -760,12 +760,23 @@ func (s *PublicBlockChainQuaiAPI) RequestDomToAppendOrFetch(ctx context.Context,
 	}
 	s.b.RequestDomToAppendOrFetch(requestDom.Hash, requestDom.Entropy, requestDom.Order)
 }
+
+type NewGenesisWorkObject struct {
+	WoHeader *types.WorkObjectHeader `json:"woheader"`
+	Header   *types.Header           `json:"header"`
+
+	// TODO: needs to decode transaction
+	// Transaction *types.Transaction      `json:"transaction"`
+}
+
 func (s *PublicBlockChainQuaiAPI) NewGenesisPendingHeader(ctx context.Context, raw json.RawMessage) {
-	var pendingHeader *types.WorkObject
+	var pendingHeader NewGenesisWorkObject
 	if err := json.Unmarshal(raw, &pendingHeader); err != nil {
 		return
 	}
-	s.b.NewGenesisPendingHeader(pendingHeader)
+	woBody := types.NewWorkObjectBody(pendingHeader.Header, nil, nil, nil, nil, nil, nil, 0)
+
+	s.b.NewGenesisPendingHeader(types.NewWorkObject(pendingHeader.WoHeader, woBody, &types.Transaction{}))
 }
 
 func (s *PublicBlockChainQuaiAPI) GetPendingHeader(ctx context.Context) (map[string]interface{}, error) {

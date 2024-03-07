@@ -278,7 +278,7 @@ func (g *Genesis) ToBlock(db ethdb.Database) *types.WorkObject {
 		head.SetParentHash(common.Hash{}, i)
 	}
 
-	return types.NewWorkObjectWithHeader(head.Header(), types.Transaction{})
+	return types.NewWorkObjectWithHeader(head.Header(), &types.Transaction{})
 }
 
 // Commit writes the block and state of a genesis specification to the database.
@@ -289,6 +289,7 @@ func (g *Genesis) Commit(db ethdb.Database, nodeLocation common.Location) (*type
 	if block.Number(nodeCtx).Sign() != 0 {
 		return nil, fmt.Errorf("can't commit genesis block with number > 0")
 	}
+	log.Global.Warn("Committing genesis block", "hash", block.Hash(), "location", nodeLocation)
 	config := g.Config
 	if config == nil {
 		config = params.AllProgpowProtocolChanges

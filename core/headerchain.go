@@ -352,7 +352,7 @@ func (hc *HeaderChain) SetCurrentHeader(head *types.WorkObject) error {
 
 	//Find a common header
 	commonHeader := hc.findCommonAncestor(head)
-	newHeader := head.CopyWorkObject()
+	newHeader := types.CopyWorkObject(head)
 
 	// Delete each header and rollback state processor until common header
 	// Accumulate the hash slice stack
@@ -421,7 +421,7 @@ func (hc *HeaderChain) SetCurrentState(head *types.WorkObject) error {
 		return nil
 	}
 
-	current := head.CopyWorkObject()
+	current := types.CopyWorkObject(head)
 	var headersWithoutState []*types.WorkObject
 	for {
 		headersWithoutState = append(headersWithoutState, current)
@@ -435,7 +435,7 @@ func (hc *HeaderChain) SetCurrentState(head *types.WorkObject) error {
 		if etxSet != nil {
 			break
 		}
-		current = header.CopyWorkObject()
+		current = types.CopyWorkObject(header)
 	}
 
 	// Run through the hash stack to update canonicalHash and forward state processor
@@ -611,7 +611,7 @@ func (hc *HeaderChain) ReadInboundEtxsAndAppendBlock(header *types.WorkObject) e
 
 // findCommonAncestor
 func (hc *HeaderChain) findCommonAncestor(header *types.WorkObject) *types.WorkObject {
-	current := header.CopyWorkObject()
+	current := types.CopyWorkObject(header)
 	for {
 		if current == nil {
 			return nil
@@ -627,7 +627,7 @@ func (hc *HeaderChain) findCommonAncestor(header *types.WorkObject) *types.WorkO
 
 // findCommonAncestor
 func (hc *HeaderChain) findCommonStateHeadAncestor(header *types.WorkObject) *types.WorkObject {
-	current := header.CopyWorkObject()
+	current := types.CopyWorkObject(header)
 	for {
 		if current == nil {
 			return nil

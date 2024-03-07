@@ -239,13 +239,13 @@ func (t *Termini) UnmarshalJSON(input []byte) error {
 
 func (wh *WorkObjectHeader) MarshalJSON() ([]byte, error) {
 	var enc struct {
-		HeaderHash common.Hash   `json:"headerHash" gencoden:"required"`
-		ParentHash common.Hash   `json:"parentHash" gencoden:"required"`
-		Number     *hexutil.Big  `json:"number" gencoden:"required"`
-		Difficulty *hexutil.Big  `json:"difficulty" gencoden:"required"`
-		TxHash     common.Hash   `json:"txHash" gencoden:"required"`
-		Location   hexutil.Bytes `json:"location" gencoden:"required"`
-		Nonce      BlockNonce    `json:"nonce" gencoden:"required"`
+		HeaderHash common.Hash   `json:"woheaderHash" gencoden:"required"`
+		ParentHash common.Hash   `json:"woparentHash" gencoden:"required"`
+		Number     *hexutil.Big  `json:"wonumber" gencoden:"required"`
+		Difficulty *hexutil.Big  `json:"wodifficulty" gencoden:"required"`
+		TxHash     common.Hash   `json:"wotxHash" gencoden:"required"`
+		Location   hexutil.Bytes `json:"wolocation" gencoden:"required"`
+		Nonce      BlockNonce    `json:"wononce" gencoden:"required"`
 	}
 
 	enc.HeaderHash = wh.HeaderHash()
@@ -261,13 +261,13 @@ func (wh *WorkObjectHeader) MarshalJSON() ([]byte, error) {
 
 func (wh *WorkObjectHeader) UnmarshalJSON(input []byte) error {
 	var dec struct {
-		HeaderHash common.Hash     `json:"headerHash" gencoden:"required"`
-		ParentHash common.Hash     `json:"parentHash" gencoden:"required"`
-		Number     *hexutil.Big    `json:"number" gencoden:"required"`
-		Difficulty *hexutil.Big    `json:"difficulty" gencoden:"required"`
-		TxHash     common.Hash     `json:"txHash" gencoden:"required"`
-		Location   common.Location `json:"location" gencoden:"required"`
-		Nonce      BlockNonce      `json:"nonce" gencoden:"required"`
+		HeaderHash common.Hash     `json:"woheaderHash" gencoden:"required"`
+		ParentHash common.Hash     `json:"woparentHash" gencoden:"required"`
+		Number     *hexutil.Big    `json:"wonumber" gencoden:"required"`
+		Difficulty *hexutil.Big    `json:"wodifficulty" gencoden:"required"`
+		TxHash     common.Hash     `json:"wotxHash" gencoden:"required"`
+		Location   common.Location `json:"wolocation" gencoden:"required"`
+		Nonce      BlockNonce      `json:"wononce" gencoden:"required"`
 	}
 
 	err := json.Unmarshal(input, &dec)

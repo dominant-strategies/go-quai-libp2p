@@ -979,14 +979,14 @@ func (sl *Slice) computePendingHeader(localPendingHeaderWithTermini types.Pendin
 		}).Debug("computePendingHeader")
 		if domOrigin {
 			newPh = sl.combinePendingHeader(localPendingHeaderWithTermini.WorkObject(), domPendingHeader, nodeCtx, true)
-			return types.NewPendingHeader(newPh.CopyWorkObject(), localPendingHeaderWithTermini.Termini())
+			return types.NewPendingHeader(types.CopyWorkObject(newPh), localPendingHeaderWithTermini.Termini())
 		}
 		newPh = sl.combinePendingHeader(localPendingHeaderWithTermini.WorkObject(), cachedPendingHeaderWithTermini.WorkObject(), nodeCtx, true)
-		return types.NewPendingHeader(newPh.CopyWorkObject(), localPendingHeaderWithTermini.Termini())
+		return types.NewPendingHeader(types.CopyWorkObject(newPh), localPendingHeaderWithTermini.Termini())
 	} else {
 		if domOrigin {
 			newPh = sl.combinePendingHeader(localPendingHeaderWithTermini.WorkObject(), domPendingHeader, nodeCtx, true)
-			return types.NewPendingHeader(newPh.CopyWorkObject(), localPendingHeaderWithTermini.Termini())
+			return types.NewPendingHeader(types.CopyWorkObject(newPh), localPendingHeaderWithTermini.Termini())
 		}
 		return localPendingHeaderWithTermini
 	}
@@ -1003,7 +1003,7 @@ func (sl *Slice) updatePhCacheFromDom(pendingHeader types.PendingHeader, termini
 	localPendingHeader, exists := sl.readPhCache(hash)
 
 	if exists {
-		combinedPendingHeader := localPendingHeader.WorkObject().CopyWorkObject()
+		combinedPendingHeader := types.CopyWorkObject(localPendingHeader.WorkObject())
 		for _, i := range indices {
 			combinedPendingHeader = sl.combinePendingHeader(pendingHeader.WorkObject(), combinedPendingHeader, i, false)
 		}
@@ -1059,7 +1059,7 @@ func (sl *Slice) updatePhCacheFromDom(pendingHeader types.PendingHeader, termini
 						sl.logger.WithField("err", err).Error("Error generating slice pending header")
 						return err
 					}
-					combinedPendingHeader = newPendingHeader.WorkObject().CopyWorkObject()
+					combinedPendingHeader = types.CopyWorkObject(newPendingHeader.WorkObject())
 					sl.logger.WithFields(log.Fields{
 						"NumberArray": combinedPendingHeader.Header().NumberArray(),
 						"ParentHash":  combinedPendingHeader.ParentHash(nodeCtx),
@@ -1147,7 +1147,7 @@ func (sl *Slice) updatePhCache(pendingHeaderWithTermini types.PendingHeader, inS
 	cachedTermini.SetSubTermini(termini.SubTermini())
 
 	// Update the pendingHeader Cache
-	deepCopyPendingHeaderWithTermini := types.NewPendingHeader(pendingHeaderWithTermini.WorkObject().CopyWorkObject(), cachedTermini)
+	deepCopyPendingHeaderWithTermini := types.NewPendingHeader(pendingHeaderWithTermini.WorkObject(), cachedTermini)
 	deepCopyPendingHeaderWithTermini.Header().SetLocation(sl.NodeLocation())
 	deepCopyPendingHeaderWithTermini.Header().SetTime(uint64(time.Now().Unix()))
 
@@ -1249,7 +1249,7 @@ func (sl *Slice) ConstructLocalBlock(header *types.WorkObject) (*types.WorkObjec
 	for i, blockHash := range pendingBlockBody.SubManifest {
 		subManifest[i] = blockHash
 	}
-	block := types.NewWorkObjectWithHeader(header.Header(), types.Transaction{})
+	block := types.NewWorkObjectWithHeader(header.Header(), &types.Transaction{})
 	if err := sl.validator.ValidateBody(block); err != nil {
 		return block, err
 	} else {
@@ -1293,7 +1293,7 @@ func (sl *Slice) ConstructLocalMinedBlock(woHeader *types.WorkObjectHeader) (*ty
 	pendingBlockBody.SetUncles(uncles)
 	pendingBlockBody.SetExtTransactions(etxs)
 	pendingBlockBody.SetManifest(subManifest)
-	block := types.NewWorkObject(woHeader, pendingBlockBody, types.Transaction{})
+	block := types.NewWorkObject(woHeader, pendingBlockBody, &types.Transaction{})
 
 	if err := sl.validator.ValidateBody(block); err != nil {
 		return block, err
@@ -1305,7 +1305,7 @@ func (sl *Slice) ConstructLocalMinedBlock(woHeader *types.WorkObjectHeader) (*ty
 // combinePendingHeader updates the pending header at the given index with the value from given header.
 func (sl *Slice) combinePendingHeader(header *types.WorkObject, slPendingHeader *types.WorkObject, index int, inSlice bool) *types.WorkObject {
 	// copying the slPendingHeader and updating the copy to remove any shared memory access issues
-	combinedPendingHeader := slPendingHeader.CopyWorkObject()
+	combinedPendingHeader := types.CopyWorkObject(slPendingHeader)
 
 	combinedPendingHeader.SetParentHash(header.ParentHash(index), index)
 	combinedPendingHeader.SetNumber(header.Number(index), index)
@@ -1367,8 +1367,10 @@ func (sl *Slice) NewGenesisPendingHeader(domPendingHeader *types.WorkObject) {
 		localPendingHeader.SetCoinbase(common.Zero)
 	}
 
+	localPendingHeader.SetLocation(common.Location{0, 0})
+
 	if nodeCtx == common.PRIME_CTX {
-		domPendingHeader = localPendingHeader.CopyWorkObject()
+		domPendingHeader = types.CopyWorkObject(localPendingHeader)
 	} else {
 		domPendingHeader = sl.combinePendingHeader(localPendingHeader, domPendingHeader, nodeCtx, true)
 		domPendingHeader.SetLocation(sl.NodeLocation())

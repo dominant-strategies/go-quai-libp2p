@@ -507,7 +507,7 @@ func (progpow *Progpow) FinalizeAndAssemble(chain consensus.ChainHeaderReader, w
 
 	// Header seems complete, assemble into a block and return
 	woBody := types.NewWorkObjectBody(header.Header(), txs, etxs, uncles, subManifest, receipts, trie.NewStackTrie(nil), nodeCtx)
-	return types.NewWorkObject(woHeader, woBody, types.Transaction{}), nil
+	return types.NewWorkObject(woHeader, woBody, &types.Transaction{}), nil
 }
 
 func (progpow *Progpow) NodeLocation() common.Location {

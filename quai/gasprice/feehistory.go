@@ -263,7 +263,7 @@ func (oracle *Oracle) FeeHistory(ctx context.Context, blocks int, unresolvedLast
 					}
 				}
 				if fees.block != nil {
-					fees.block = fees.block.CopyWorkObject()
+					fees.block = types.CopyWorkObject(fees.block)
 				}
 				if fees.block != nil {
 					oracle.processBlock(fees, rewardPercentiles)

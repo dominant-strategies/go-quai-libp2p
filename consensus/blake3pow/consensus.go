@@ -473,7 +473,7 @@ func (blake3pow *Blake3pow) FinalizeAndAssemble(chain consensus.ChainHeaderReade
 
 	// Header seems complete, assemble into a block and return
 	woBody := types.NewWorkObjectBody(header.Header(), txs, etxs, uncles, subManifest, receipts, trie.NewStackTrie(nil), nodeCtx)
-	return types.NewWorkObject(woHeader, woBody, types.Transaction{}), nil
+	return types.NewWorkObject(woHeader, woBody, &types.Transaction{}), nil
 }
 
 func (blake3pow *Blake3pow) ComputePowLight(header *types.Header) (common.Hash, common.Hash) {
