@@ -2,7 +2,6 @@ package types
 
 import (
 	"errors"
-	"fmt"
 	"io"
 	"math/big"
 	"sync/atomic"
@@ -70,7 +69,6 @@ func (wo *WorkObject) Body() *WorkObjectBody {
 }
 
 func (wo *WorkObject) Hash() common.Hash {
-	fmt.Println("wo:", wo)
 	return wo.woHeader.Hash()
 }
 
@@ -425,13 +423,13 @@ func (wo *WorkObject) ProtoEncode() (*ProtoWorkObject, error) {
 }
 
 func (wo *WorkObject) ProtoDecode(data *ProtoWorkObject) error {
-	protoWoHeader := new(ProtoWorkObjectHeader)
-	err := wo.woHeader.ProtoDecode(protoWoHeader)
+	wo.woHeader = new(WorkObjectHeader)
+	err := wo.woHeader.ProtoDecode(data.GetWoHeader())
 	if err != nil {
 		return err
 	}
-	protoWoBody := new(ProtoWorkObjectBody)
-	err = wo.woBody.ProtoDecode(protoWoBody)
+	wo.woBody = new(WorkObjectBody)
+	err = wo.woBody.ProtoDecode(data.GetWoBody())
 	if err != nil {
 		return err
 	}
