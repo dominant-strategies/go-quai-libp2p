@@ -984,7 +984,7 @@ func CopyPendingHeader(ph *PendingHeader) *PendingHeader {
 
 // ProtoEncode serializes h into the Quai Proto PendingHeader format
 func (ph PendingHeader) ProtoEncode() (*ProtoPendingHeader, error) {
-	protoWorkObject, err := ph.wo.ProtoEncode()
+	protoWorkObject, err := ph.WorkObject().ProtoEncode()
 	if err != nil {
 		return nil, err
 	}
@@ -998,7 +998,7 @@ func (ph PendingHeader) ProtoEncode() (*ProtoPendingHeader, error) {
 // ProtoEncode deserializes the ProtoHeader into the Header format
 func (ph *PendingHeader) ProtoDecode(protoPendingHeader *ProtoPendingHeader) error {
 	ph.wo = &WorkObject{}
-	err := ph.wo.ProtoDecode(protoPendingHeader.Wo)
+	err := ph.wo.ProtoDecode(protoPendingHeader.GetWo())
 	if err != nil {
 		return err
 	}

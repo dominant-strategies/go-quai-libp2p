@@ -509,7 +509,7 @@ func (w *worker) asyncStateLoop() {
 }
 
 // GeneratePendingBlock generates pending block given a commited block.
-func (w *worker) GeneratePendingHeader(wo *types.WorkObject, fill bool) (*types.WorkObject, error) {
+func (w *worker) GeneratePendingHeader(block *types.WorkObject, fill bool) (*types.WorkObject, error) {
 	nodeCtx := w.hc.NodeCtx()
 
 	w.interruptAsyncPhGen()
@@ -538,7 +538,7 @@ func (w *worker) GeneratePendingHeader(wo *types.WorkObject, fill bool) (*types.
 	work, err := w.prepareWork(&generateParams{
 		timestamp: uint64(timestamp),
 		coinbase:  coinbase,
-	}, wo)
+	}, block)
 	if err != nil {
 		return nil, err
 	}
@@ -546,11 +546,11 @@ func (w *worker) GeneratePendingHeader(wo *types.WorkObject, fill bool) (*types.
 	if nodeCtx == common.ZONE_CTX && w.hc.ProcessingState() {
 		work.txs = append(work.txs, types.NewTx(&types.QiTx{})) // placeholder
 		// Fill pending transactions from the txpool
-		w.adjustGasLimit(nil, work, wo)
+		w.adjustGasLimit(nil, work, block)
 		work.utxoFees = big.NewInt(0)
 		if fill {
 			start := time.Now()
-			w.fillTransactions(interrupt, work, wo)
+			w.fillTransactions(interrupt, work, block)
 			w.fillTransactionsRollingAverage.Add(time.Since(start))
 			w.logger.WithFields(log.Fields{
 				"count":   len(work.txs),
@@ -566,14 +566,12 @@ func (w *worker) GeneratePendingHeader(wo *types.WorkObject, fill bool) (*types.
 	}
 
 	// Create a local environment copy, avoid the data race with snapshot state.
-	newWo, err := w.FinalizeAssemble(w.hc, work.wo, wo, work.state, work.txs, work.unclelist(), work.etxs, work.subManifest, work.receipts)
+	newWo, err := w.FinalizeAssemble(w.hc, work.wo, block, work.state, work.txs, work.unclelist(), work.etxs, work.subManifest, work.receipts)
 	if err != nil {
 		return nil, err
 	}
 
 	work.wo = newWo
-
-	//w.printPendingHeaderInfo(work, newWo, start)
 
 	return newWo, nil
 }
@@ -897,13 +895,13 @@ func (w *worker) prepareWork(genParams *generateParams, wo *types.WorkObject) (*
 	// Construct the sealing block header, set the extra field if it's allowed
 	num := parent.Header().Number(nodeCtx)
 	header := types.EmptyHeader(nodeCtx)
-	header.SetParentHash(wo.Header().Hash(), nodeCtx)
+	header.SetParentHash(parent.Hash(), nodeCtx)
 	header.SetNumber(big.NewInt(int64(num.Uint64())+1), nodeCtx)
 	header.SetTime(timestamp)
 	header.SetLocation(w.hc.NodeLocation())
 
 	// Only calculate entropy if the parent is not the genesis block
-	if parent.Header().Hash() != w.hc.config.GenesisHash {
+	if parent.Hash() != w.hc.config.GenesisHash {
 		_, order, err := w.engine.CalcOrder(parent)
 		if err != nil {
 			return nil, err
@@ -972,7 +970,10 @@ func (w *worker) prepareWork(genParams *generateParams, wo *types.WorkObject) (*
 		}
 		return env, nil
 	} else {
-		return &environment{wo: wo}, nil
+		proposedWoHeader := types.NewWorkObjectHeader(header.Hash(), header.ParentHash(nodeCtx), header.Number(nodeCtx), header.Difficulty(), types.EmptyRootHash, header.Nonce(), header.Location())
+		proposedWoBody := types.NewWorkObjectBody(header.Header(), nil, nil, nil, nil, nil, nil, nodeCtx)
+		proposedWo := types.NewWorkObject(proposedWoHeader, proposedWoBody, &types.Transaction{})
+		return &environment{wo: proposedWo}, nil
 	}
 
 }
@@ -1078,37 +1079,24 @@ func (w *worker) FinalizeAssemble(chain consensus.ChainHeaderReader, header *typ
 			etxRollupHash := types.DeriveSha(etxRollup, trie.NewStackTrie(nil))
 			wo.Header().SetEtxRollupHash(etxRollupHash)
 		}
-
-		w.AddPendingWorkObjectBody(wo.Body())
 	}
-	return wo, nil
-}
 
-// GetPendingBlockBodyKey takes a header and hashes all the Roots together
-// and returns the key to be used for the pendingBlockBodyCache.
-func (w *worker) getPendingWorkObjectBodyKey(header *types.Header) common.Hash {
-	return types.RlpHash([]interface{}{
-		header.UncleHash(),
-		header.TxHash(),
-		header.EtxHash(),
-	})
+	return wo, nil
 }
 
 // AddPendingBlockBody adds an entry in the lru cache for the given pendingBodyKey
 // maps it to body.
-func (w *worker) AddPendingWorkObjectBody(wb *types.WorkObjectBody) {
-	w.pendingBlockBody.ContainsOrAdd(w.getPendingWorkObjectBodyKey(wb.Header()), wb)
+func (w *worker) AddPendingWorkObjectBody(wb *types.WorkObject) {
+	w.pendingBlockBody.ContainsOrAdd(wb.SealHash(), wb.Body())
 }
 
 // GetPendingBlockBody gets the block body associated with the given header.
 func (w *worker) GetPendingBlockBody(woHeader *types.WorkObjectHeader) *types.WorkObjectBody {
-	header := w.hc.GetHeaderByHash(woHeader.HeaderHash())
-	key := w.getPendingWorkObjectBodyKey(header.Header())
-	body, ok := w.pendingBlockBody.Get(key)
+	body, ok := w.pendingBlockBody.Get(woHeader.SealHash())
 	if ok {
 		return body.(*types.WorkObjectBody)
 	}
-	w.logger.WithField("key", key).Warn("pending block body not found for header")
+	w.logger.WithField("key", woHeader.SealHash()).Warn("pending block body not found for header")
 	return nil
 }
 

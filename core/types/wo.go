@@ -237,7 +237,9 @@ func (wo *WorkObject) SetManifest(manifest BlockManifest) {
 }
 
 func (wo *WorkObject) SetParentHash(parentHash common.Hash, nodeCtx int) {
-	wo.woHeader.parentHash = parentHash
+	if nodeCtx == common.ZONE_CTX {
+		wo.woHeader.parentHash = parentHash
+	}
 	wo.woBody.header.SetParentHash(parentHash, nodeCtx)
 }
 

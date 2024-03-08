@@ -629,14 +629,12 @@ func (sl *Slice) readPhCache(hash common.Hash) (types.PendingHeader, bool) {
 
 // Write the phCache
 func (sl *Slice) writePhCache(hash common.Hash, pendingHeader types.PendingHeader) {
-	fmt.Println("write phcache:", hash, "ph", pendingHeader, "nodeCtx:", sl.NodeCtx())
 	sl.phCache.Add(hash, pendingHeader)
 	rawdb.WritePendingHeader(sl.sliceDb, hash, pendingHeader)
 }
 
 // WriteBestPhKey writes the sl.bestPhKey
 func (sl *Slice) WriteBestPhKey(hash common.Hash) {
-	fmt.Println("write bestphkey:", hash)
 	sl.bestPhKey = hash
 	// write the ph head hash to the db.
 	rawdb.WriteBestPhKey(sl.sliceDb, hash)
@@ -813,16 +811,8 @@ func (sl *Slice) poem(externS *big.Int, currentS *big.Int) bool {
 
 // GetPendingHeader is used by the miner to request the current pending header
 func (sl *Slice) GetPendingHeader() (*types.WorkObjectHeader, error) {
-	fmt.Println("GetPendingHeader:", sl.bestPhKey, "len", sl.phCache.Len())
 	if ph, exists := sl.readPhCache(sl.bestPhKey); exists {
-		newWorkObject := &types.WorkObjectHeader{}
-		newWorkObject.SetHeaderHash(ph.Header().Hash())
-		newWorkObject.SetParentHash(ph.Header().ParentHash(sl.NodeCtx()))
-		newWorkObject.SetNumber(ph.Header().Number(sl.NodeCtx()))
-		newWorkObject.SetDifficulty(ph.Header().Difficulty())
-		newWorkObject.SetTxHash(ph.Header().TxHash()) //This is not a real tx hash, but rather root
-		newWorkObject.SetLocation(ph.Header().Location())
-		return newWorkObject, nil
+		return ph.WorkObject().WorkObjectHeader(), nil
 	} else {
 		return nil, errors.New("empty pending header")
 	}
@@ -1374,6 +1364,7 @@ func (sl *Slice) NewGenesisPendingHeader(domPendingHeader *types.WorkObject) {
 	} else {
 		domPendingHeader = sl.combinePendingHeader(localPendingHeader, domPendingHeader, nodeCtx, true)
 		domPendingHeader.SetLocation(sl.NodeLocation())
+		domPendingHeader.SetHeaderHash(domPendingHeader.Body().Header().Hash())
 	}
 
 	if nodeCtx != common.ZONE_CTX {
@@ -1395,6 +1386,8 @@ func (sl *Slice) NewGenesisPendingHeader(domPendingHeader *types.WorkObject) {
 	}
 	if sl.hc.Empty() {
 		domPendingHeader.SetTime(uint64(time.Now().Unix()))
+		domPendingHeader.SetHeaderHash(domPendingHeader.Body().Header().Hash())
+		sl.miner.worker.AddPendingWorkObjectBody(domPendingHeader)
 		sl.writePhCache(sl.config.GenesisHash, types.NewPendingHeader(domPendingHeader, genesisTermini))
 	}
 }
