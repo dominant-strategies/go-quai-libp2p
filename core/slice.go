@@ -1217,29 +1217,10 @@ func (sl *Slice) init(genesis *Genesis) error {
 // from the candidate body db. This method is used when peers give the block as a placeholder
 // for the body.
 func (sl *Slice) ConstructLocalBlock(header *types.WorkObject) (*types.WorkObject, error) {
-	pendingBlockBody := rawdb.ReadBody(sl.sliceDb, header.Hash(), header.NumberU64(sl.NodeCtx()), sl.NodeLocation())
-	if pendingBlockBody == nil {
+	block := rawdb.ReadWorkObject(sl.sliceDb, header.Hash(), types.BlockObject)
+	if block == nil {
 		return nil, ErrBodyNotFound
 	}
-	// Load uncles because they are not included in the block response.
-	txs := make([]*types.Transaction, len(pendingBlockBody.Transactions))
-	for i, tx := range pendingBlockBody.Transactions {
-		txs[i] = tx
-	}
-	uncles := make([]*types.Header, len(pendingBlockBody.Uncles))
-	for i, uncle := range pendingBlockBody.Uncles {
-		uncles[i] = uncle
-		sl.logger.WithField("hash", uncle.Hash()).Debug("Pending Block uncle")
-	}
-	etxs := make([]*types.Transaction, len(pendingBlockBody.ExtTransactions))
-	for i, etx := range pendingBlockBody.ExtTransactions {
-		etxs[i] = etx
-	}
-	subManifest := make(types.BlockManifest, len(pendingBlockBody.SubManifest))
-	for i, blockHash := range pendingBlockBody.SubManifest {
-		subManifest[i] = blockHash
-	}
-	block := types.NewWorkObjectWithHeader(header.Header(), &types.Transaction{}, sl.NodeCtx())
 	if err := sl.validator.ValidateBody(block); err != nil {
 		return block, err
 	} else {

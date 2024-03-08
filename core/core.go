@@ -683,7 +683,11 @@ func (c *Core) DownloadBlocksInManifest(blockHash common.Hash, manifest types.Bl
 
 // ConstructLocalBlock takes a header and construct the Block locally
 func (c *Core) ConstructLocalMinedBlock(woHeader *types.WorkObjectHeader) (*types.WorkObject, error) {
-	return c.sl.ConstructLocalMinedBlock(woHeader)
+	wo, err := c.sl.ConstructLocalMinedBlock(woHeader)
+	if err == nil {
+		c.WriteBlock(wo)
+	}
+	return wo, err
 }
 
 func (c *Core) SubRelayPendingHeader(slPendingHeader types.PendingHeader, newEntropy *big.Int, location common.Location, subReorg bool, order int) {
