@@ -1,14 +1,18 @@
 package utils
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
 	"math/big"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	godebug "runtime/debug"
 	"strconv"
 	"strings"
@@ -86,6 +90,7 @@ var NodeFlags = []Flag{
 	UnlockedAccountFlag,
 	PasswordFileFlag,
 	VMEnableDebugFlag,
+	PprofFlag,
 	InsecureUnlockAllowedFlag,
 	GpoBlocksFlag,
 	GpoPercentileFlag,
@@ -463,6 +468,12 @@ var (
 		Name:  c_NodeFlagPrefix + "vmdebug",
 		Value: false,
 		Usage: "Record information useful for VM and contract debugging" + generateEnvDoc(c_NodeFlagPrefix+"vmdebug"),
+	}
+
+	PprofFlag = Flag{
+		Name:  "pprof",
+		Value: false,
+		Usage: "Enable the pprof HTTP server",
 	}
 
 	InsecureUnlockAllowedFlag = Flag{
@@ -1212,10 +1223,51 @@ func CheckExclusive(args ...interface{}) {
 	}
 }
 
+func EnablePprof(nodeLocation common.Location) {
+	runtime.SetBlockProfileRate(1)
+	runtime.SetMutexProfileFraction(1)
+	var port string
+	myContext := nodeLocation
+	switch {
+	case bytes.Equal(myContext, []byte{}): // PRIME
+		port = "8081"
+	case bytes.Equal(myContext, []byte{0}): // Region 0
+		port = "8090"
+	// case bytes.Equal(myContext, []byte{1}): // Region 1
+	// 	port = "8100"
+	// case bytes.Equal(myContext, []byte{2}): // Region 2
+	// 	port = "8110"
+	case bytes.Equal(myContext, []byte{0, 0}): // Zone 0-0
+		port = "8091"
+	// case bytes.Equal(myContext, []byte{0, 1}): // Zone 0-1
+	// 	port = "8092"
+	// case bytes.Equal(myContext, []byte{0, 2}): // Zone 0-2
+	// 	port = "8093"
+	// case bytes.Equal(myContext, []byte{1, 0}): // Zone 1-0
+	// 	port = "8101"
+	// case bytes.Equal(myContext, []byte{1, 1}): // Zone 1-1
+	// 	port = "8102"
+	// case bytes.Equal(myContext, []byte{1, 2}): // Zone 1-2
+	// 	port = "8103"
+	// case bytes.Equal(myContext, []byte{2, 0}): // Zone 2-0
+	// 	port = "8111"
+	// case bytes.Equal(myContext, []byte{2, 1}): // Zone 2-1
+	// 	port = "8112"
+	// case bytes.Equal(myContext, []byte{2, 2}): // Zone 2-2
+	// 	port = "8113"
+	default:
+		port = "8085"
+	}
+	go func() {
+		log.Global.Print(http.ListenAndServe("localhost:"+port, nil))
+	}()
+}
+
 // SetQuaiConfig applies quai-related command line flags to the config.
 func SetQuaiConfig(stack *node.Node, cfg *quaiconfig.Config, slicesRunning []common.Location, nodeLocation common.Location, logger *log.Logger) {
 	cfg.NodeLocation = nodeLocation
 	cfg.SlicesRunning = slicesRunning
+
 	// only set etherbase if its a zone chain
 	if len(nodeLocation) == 2 {
 		setEtherbase(cfg)
@@ -1241,6 +1293,12 @@ func SetQuaiConfig(stack *node.Node, cfg *quaiconfig.Config, slicesRunning []com
 
 	// set the gas limit ceil
 	setGasLimitCeil(cfg)
+
+	// if cfg.PprofFlag {
+	if viper.IsSet(PprofFlag.Name) {
+		log.Global.Info("Starting pprof server")
+		EnablePprof(nodeLocation)
+	}
 
 	// Cap the cache allowance and tune the garbage collector
 	mem, err := gopsutil.VirtualMemory()
