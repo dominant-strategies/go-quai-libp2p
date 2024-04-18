@@ -22,4 +22,6 @@ func registerMetrics() {
 	messageMetrics.WithLabelValues("blocks")
 	messageMetrics.WithLabelValues("headers")
 	messageMetrics.WithLabelValues("transactions")
+	messageMetrics.WithLabelValues("requests")
+	messageMetrics.WithLabelValues("responses")
 }
