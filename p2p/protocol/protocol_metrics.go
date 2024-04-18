@@ -15,6 +15,8 @@ func init() {
 }
 
 func registerMetrics() {
+	streamMetrics = metrics_config.NewGaugeVec("StreamGauges", "Track the number of streams opened by this node")
+	streamMetrics.WithLabelValues("NumStreams")
 
 	messageMetrics = metrics_config.NewCounterVec("MessageCounters", "Counters to track messages sent over the P2P layer")
 	messageMetrics.WithLabelValues("blocks")
