@@ -198,7 +198,7 @@ func NewStateProcessor(config *params.ChainConfig, hc *HeaderChain, engine conse
 // Process returns the receipts and logs accumulated during the process and
 // returns the amount of gas that was used in the process. If any of the
 // transactions failed to execute due to insufficient gas it will return an error.
-func (p *StateProcessor) Process(block *types.Block, etxSet types.EtxSet) (types.Receipts, []*types.Transaction, []*types.Log, *state.StateDB, uint64, error) {
+func (p *StateProcessor) Process(block *types.Block, etxSet *types.EtxSet) (types.Receipts, []*types.Transaction, []*types.Log, *state.StateDB, uint64, error) {
 	var (
 		receipts     types.Receipts
 		usedGas      = new(uint64)
@@ -255,7 +255,9 @@ func (p *StateProcessor) Process(block *types.Block, etxSet types.EtxSet) (types
 	if etxPLimit < params.ETXPLimitMin {
 		etxPLimit = params.ETXPLimitMin
 	}
-
+	minimumEtxGas := header.GasLimit() / params.MinimumEtxGasDivisor // 20% of the block gas limit
+	maximumEtxGas := minimumEtxGas * params.MaximumEtxGasMultiplier  // 40% of the block gas limit
+	totalEtxGas := uint64(0)
 	totalFees := big.NewInt(0)
 	qiEtxs := make([]*types.Transaction, 0)
 	for i, tx := range block.Transactions() {
@@ -265,7 +267,7 @@ func (p *StateProcessor) Process(block *types.Block, etxSet types.EtxSet) (types
 				// coinbase tx currently exempt from gas and outputs are added after all txs are processed
 				continue
 			}
-			fees, etxs, err := ProcessQiTx(tx, true, statedb, gp, usedGas, p.hc.pool.signer, p.hc.NodeLocation(), *p.config.ChainID, &etxRLimit, &etxPLimit)
+			fees, etxs, err := ProcessQiTx(tx, true, header, statedb, gp, usedGas, p.hc.pool.signer, p.hc.NodeLocation(), *p.config.ChainID, &etxRLimit, &etxPLimit)
 			if err != nil {
 				return nil, nil, nil, nil, 0, fmt.Errorf("could not apply tx %d [%v]: %w", i, tx.Hash().Hex(), err)
 			}
@@ -288,33 +290,33 @@ func (p *StateProcessor) Process(block *types.Block, etxSet types.EtxSet) (types
 		var receipt *types.Receipt
 		if tx.Type() == types.ExternalTxType {
 			startTimeEtx := time.Now()
-			etxEntry, exists := etxSet[tx.Hash()]
-			if !exists { // Verify that the ETX exists in the set
-				return nil, nil, nil, nil, 0, fmt.Errorf("invalid external transaction: etx %x not found in unspent etx set", tx.Hash())
+			// ETXs MUST be included in order, so popping the first from the queue must equal the first in the block
+			etxHash := etxSet.Pop()
+			if etxHash != tx.Hash() {
+				return nil, nil, nil, nil, 0, fmt.Errorf("invalid external transaction: etx %x is not in order or not found in unspent etx set", tx.Hash())
 			}
-			etx := etxEntry.ETX
-			if etx.To().IsInQiLedgerScope() {
-				if etx.Value().Int64() > types.MaxDenomination { // sanity check
-					return nil, nil, nil, nil, 0, fmt.Errorf("etx %032x emits UTXO with value %d greater than max denomination", etx.Hash(), etx.Value().Int64())
+			if tx.To().IsInQiLedgerScope() {
+				if tx.Value().Int64() > types.MaxDenomination { // sanity check
+					return nil, nil, nil, nil, 0, fmt.Errorf("etx %032x emits UTXO with value %d greater than max denomination", tx.Hash(), tx.Value().Int64())
 				}
 				// There are no more checks to be made as the ETX is worked so add it to the set
-				statedb.CreateUTXO(etx.OriginatingTxHash(), etx.ETXIndex(), types.NewUtxoEntry(types.NewTxOut(uint8(etx.Value().Int64()), etx.To().Bytes())))
+				statedb.CreateUTXO(tx.OriginatingTxHash(), tx.ETXIndex(), types.NewUtxoEntry(types.NewTxOut(uint8(tx.Value().Int64()), tx.To().Bytes())))
 				if err := gp.SubGas(params.CallValueTransferGas); err != nil {
 					return nil, nil, nil, nil, 0, err
 				}
-				*usedGas += params.CallValueTransferGas // In the future we may want to determine what a fair gas cost is
-				delete(etxSet, etxEntry.ETX.Hash())     // This ETX has been spent so remove it from the unspent set
+				*usedGas += params.CallValueTransferGas    // In the future we may want to determine what a fair gas cost is
+				totalEtxGas += params.CallValueTransferGas // In the future we may want to determine what a fair gas cost is
 				timeEtxDelta := time.Since(startTimeEtx)
 				timeEtx += timeEtxDelta
 				continue
 			} else {
-				prevZeroBal := prepareApplyETX(statedb, &etx, nodeLocation)
-				receipt, err = applyTransaction(msg, p.config, p.hc, nil, gp, statedb, blockNumber, blockHash, &etx, usedGas, vmenv, &etxRLimit, &etxPLimit, p.logger)
+				prevZeroBal := prepareApplyETX(statedb, tx, nodeLocation)
+				receipt, err = applyTransaction(msg, p.config, p.hc, nil, gp, statedb, blockNumber, blockHash, tx, usedGas, vmenv, &etxRLimit, &etxPLimit, p.logger)
 				statedb.SetBalance(common.ZeroInternal(nodeLocation), prevZeroBal) // Reset the balance to what it previously was. Residual balance will be lost
 				if err != nil {
-					return nil, nil, nil, nil, 0, fmt.Errorf("could not apply tx %d [%v]: %w", i, etx.Hash().Hex(), err)
+					return nil, nil, nil, nil, 0, fmt.Errorf("could not apply tx %d [%v]: %w", i, tx.Hash().Hex(), err)
 				}
-				delete(etxSet, etxEntry.ETX.Hash()) // This ETX has been spent so remove it from the unspent set
+				totalEtxGas += receipt.GasUsed
 				timeEtxDelta := time.Since(startTimeEtx)
 				timeEtx += timeEtxDelta
 			}
@@ -342,7 +344,9 @@ func (p *StateProcessor) Process(block *types.Block, etxSet types.EtxSet) (types
 		for _, txOut := range qiTransactions[0].TxOut() {
 			totalCoinbaseOut.Add(totalCoinbaseOut, types.Denominations[txOut.Denomination])
 		}
-		maxCoinbaseOut := misc.CalculateRewardForQiWithFeesBigInt(header, totalFees) // TODO: Miner tip will soon no longer exist
+		reward := misc.CalculateReward(header)
+		maxCoinbaseOut := new(big.Int).Add(reward, totalFees) // TODO: Miner tip will soon no longer exist
+
 		if totalCoinbaseOut.Cmp(maxCoinbaseOut) > 0 {
 			return nil, nil, nil, nil, 0, fmt.Errorf("coinbase output value of %v is higher than expected value of %v", totalCoinbaseOut, maxCoinbaseOut)
 		}
@@ -365,6 +369,10 @@ func (p *StateProcessor) Process(block *types.Block, etxSet types.EtxSet) (types
 				"denomination": txOut.Denomination,
 			}).Debug("Created Coinbase UTXO")
 		}
+	}
+
+	if (etxSet != nil && etxSet.Len() > 0 && totalEtxGas < minimumEtxGas) || totalEtxGas > maximumEtxGas {
+		return nil, nil, nil, nil, 0, fmt.Errorf("total gas used by ETXs %d is not within the range %d to %d", totalEtxGas, minimumEtxGas, maximumEtxGas)
 	}
 
 	time4 := common.PrettyDuration(time.Since(start))
@@ -462,13 +470,16 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 	return receipt, err
 }
 
-func ProcessQiTx(tx *types.Transaction, updateState bool, statedb *state.StateDB, gp *GasPool, usedGas *uint64, signer types.Signer, location common.Location, chainId big.Int, etxRLimit, etxPLimit *int) (*big.Int, []*types.Transaction, error) {
+func ProcessQiTx(tx *types.Transaction, updateState bool, currentHeader *types.Header, statedb *state.StateDB, gp *GasPool, usedGas *uint64, signer types.Signer, location common.Location, chainId big.Int, etxRLimit, etxPLimit *int) (*big.Int, []*types.Transaction, error) {
 	// Sanity checks
-	if tx.Type() != types.QiTxType {
+	if tx == nil || tx.Type() != types.QiTxType {
 		return nil, nil, fmt.Errorf("tx %032x is not a QiTx", tx.Hash())
 	}
 	if tx.ChainId().Cmp(&chainId) != 0 {
 		return nil, nil, fmt.Errorf("tx %032x has invalid chain ID", tx.Hash())
+	}
+	if currentHeader == nil || statedb == nil || gp == nil || usedGas == nil || signer == nil || etxRLimit == nil || etxPLimit == nil {
+		return nil, nil, errors.New("one of the parameters is nil")
 	}
 
 	addresses := make(map[common.AddressBytes]struct{})
@@ -567,7 +578,7 @@ func ProcessQiTx(tx *types.Transaction, updateState bool, statedb *state.StateDB
 			etxInner := types.ExternalTx{Value: big.NewInt(int64(txOut.Denomination)), To: &toAddr, Sender: common.ZeroAddress(location), OriginatingTxHash: tx.Hash(), ETXIndex: uint16(txOutIdx), Gas: params.TxGas, ChainID: &chainId}
 			etx := types.NewTx(&etxInner)
 			etxs = append(etxs, etx)
-			log.Global.Info("Added UTXO ETX to ETX list")
+			log.Global.Debug("Added UTXO ETX to ETX list")
 		} else {
 			// This output creates a normal UTXO
 			utxo := types.NewUtxoEntry(&txOut)
@@ -603,8 +614,16 @@ func ProcessQiTx(tx *types.Transaction, updateState bool, statedb *state.StateDB
 		return nil, nil, errors.New("invalid signature for digest hash " + txDigestHash.String())
 	}
 	// the fee to pay the basefee/miner is the difference between inputs and outputs
-	// We should enforce the Qi-converted-basefee here
 	txFeeInQit := new(big.Int).Sub(totalQitIn, totalQitOut)
+	// Check tx against required base fee and gas
+	baseFeeInQi := misc.QuaiToQi(currentHeader, currentHeader.BaseFee())
+	minimumFee := new(big.Int).Mul(baseFeeInQi, big.NewInt(int64(txGas)))
+	if txFeeInQit.Cmp(minimumFee) < 0 {
+		return nil, nil, fmt.Errorf("tx %032x has insufficient fee for base fee of %d and gas of %d", tx.Hash(), baseFeeInQi.Uint64(), txGas)
+	}
+	// Miner gets remainder of fee after base fee
+	txFeeInQit.Sub(txFeeInQit, minimumFee)
+
 	*etxRLimit -= ETXRCount
 	*etxPLimit -= ETXPCount
 	return txFeeInQit, etxs, nil
@@ -612,10 +631,7 @@ func ProcessQiTx(tx *types.Transaction, updateState bool, statedb *state.StateDB
 
 // Apply State
 func (p *StateProcessor) Apply(batch ethdb.Batch, block *types.Block, newInboundEtxs types.Transactions) ([]*types.Log, error) {
-	nodeLocation := p.hc.NodeLocation()
 	nodeCtx := p.hc.NodeCtx()
-	// Update the set of inbound ETXs which may be mined. This adds new inbound
-	// ETXs to the set and removes expired ETXs so they are no longer available
 	start := time.Now()
 	blockHash := block.Hash()
 	header := types.CopyHeader(block.Header())
@@ -624,7 +640,6 @@ func (p *StateProcessor) Apply(batch ethdb.Batch, block *types.Block, newInbound
 	if etxSet == nil {
 		return nil, errors.New("failed to load etx set")
 	}
-	etxSet.Update(newInboundEtxs, block.NumberU64(nodeCtx), nodeLocation)
 	time2 := common.PrettyDuration(time.Since(start))
 	// Process our block
 	receipts, utxoEtxs, logs, statedb, usedGas, err := p.Process(block, etxSet)
@@ -638,7 +653,7 @@ func (p *StateProcessor) Apply(batch ethdb.Batch, block *types.Block, newInbound
 		}).Warn("Block hash changed after Processing the block")
 	}
 	time3 := common.PrettyDuration(time.Since(start))
-	err = p.validator.ValidateState(block, statedb, receipts, utxoEtxs, usedGas)
+	err = p.validator.ValidateState(block, statedb, receipts, utxoEtxs, etxSet, usedGas)
 	if err != nil {
 		return nil, err
 	}
@@ -673,6 +688,12 @@ func (p *StateProcessor) Apply(batch ethdb.Batch, block *types.Block, newInbound
 		return nil, err
 	}
 	time8 = common.PrettyDuration(time.Since(start))
+	// Update the set of inbound ETXs which may be mined in the next block
+	// These new inbounds are not included in the ETX hash of the current block
+	// because they are not known a-priori
+	etxSet.Update(newInboundEtxs, p.hc.NodeLocation(), func(hash common.Hash, etx *types.Transaction) {
+		rawdb.WriteETX(batch, hash, etx) // This must be done because of rawdb <-> types import cycle
+	})
 	rawdb.WriteEtxSet(batch, header.Hash(), header.NumberU64(nodeCtx), etxSet)
 	time12 := common.PrettyDuration(time.Since(start))
 
@@ -916,7 +937,9 @@ func (p *StateProcessor) StateAtBlock(block *types.Block, reexec uint64, base *s
 			return nil, errors.New("etxSet set is nil in StateProcessor")
 		}
 		inboundEtxs := rawdb.ReadInboundEtxs(p.hc.bc.db, current.Hash(), p.hc.NodeLocation())
-		etxSet.Update(inboundEtxs, current.NumberU64(nodeCtx), nodeLocation)
+		etxSet.Update(inboundEtxs, nodeLocation, func(hash common.Hash, etx *types.Transaction) {
+			rawdb.WriteETX(rawdb.NewMemoryDatabase(), hash, etx)
+		})
 
 		currentBlock := rawdb.ReadBlock(p.hc.bc.db, current.Hash(), current.NumberU64(nodeCtx), p.hc.NodeLocation())
 		if currentBlock == nil {

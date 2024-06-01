@@ -140,6 +140,8 @@ const (
 	RefundQuotient uint64 = 5
 
 	MaxAddressGrindAttempts int = 1000 // Maximum number of attempts to grind an address to a valid one
+	MinimumEtxGasDivisor        = 5    // The divisor for the minimum gas for inbound ETXs (Block gas limit / MinimumEtxGasDivisor)
+	MaximumEtxGasMultiplier     = 2    // Multiplied with the minimum ETX gas for inbound ETXs (Block gas limit / MinimumEtxGasDivisor) * MaximumEtxGasMultiplier
 )
 
 var (
@@ -159,7 +161,7 @@ var (
 	LighthouseDurationLimit           = big.NewInt(7)     // The decision boundary on the blocktime duration used to determine whether difficulty should go up or not.
 	LocalDurationLimit                = big.NewInt(2)     // The decision boundary on the blocktime duration used to determine whether difficulty should go up or not.
 	TimeFactor                        = big.NewInt(7)
-	PrimeEntropyTarget                = big.NewInt(441) // This is TimeFactor*TimeFactor*common.NumZonesInRegion*common.NumRegionsInPrime
+	PrimeEntropyTarget                = big.NewInt(100) // This is TimeFactor*TimeFactor*common.NumZonesInRegion*common.NumRegionsInPrime
 	RegionEntropyTarget               = big.NewInt(21)  // This is TimeFactor*common.NumZonesInRegion
 	DifficultyAdjustmentPeriod        = big.NewInt(360) // This is the number of blocks over which the average has to be taken
 	DifficultyAdjustmentFactor int64  = 40              // This is the factor that divides the log of the change in the difficulty

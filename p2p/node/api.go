@@ -65,6 +65,7 @@ func (p *P2PNode) Broadcast(location common.Location, data interface{}) error {
 
 func (p *P2PNode) SetConsensusBackend(be quai.ConsensusAPI) {
 	p.consensus = be
+	p.pubsub.SetQuaiBackend(be)
 }
 
 type stopFunc func() error
@@ -111,7 +112,11 @@ func (p *P2PNode) Stop() error {
 func (p *P2PNode) requestFromPeers(location common.Location, data interface{}, datatype interface{}, resultChan chan interface{}) {
 	go func() {
 		defer close(resultChan)
-		peers := p.peerManager.GetBestPeersWithFallback()
+		peers := p.peerManager.GetBestPeersWithFallback(location)
+		log.Global.WithFields(log.Fields{
+			"peers":    peers,
+			"location": location,
+		}).Debug("Requesting data from peers")
 
 		var requestWg sync.WaitGroup
 		for _, peerID := range peers {
@@ -146,35 +151,40 @@ func (p *P2PNode) queryDHT(location common.Location, data interface{}, datatype 
 	}
 }
 
-func (p *P2PNode) requestAndWait(peerID peer.ID, location common.Location, data interface{}, datatype interface{}, resultChan chan interface{}) {
+func (p *P2PNode) requestAndWait(peerID peer.ID, location common.Location, data interface{}, dataType interface{}, resultChan chan interface{}) {
+	var recvd interface{}
+	var err error
 	// Ask peer and wait for response
-	if recvd, err := p.requestFromPeer(peerID, location, data, datatype); err == nil {
+	if recvd, err = p.requestFromPeer(peerID, location, data, dataType); err == nil {
 		log.Global.WithFields(log.Fields{
-			"data":   data,
-			"peerId": peerID,
-		}).Warn("Received data from peer")
-		// send the block to the result channel
-		resultChan <- recvd
+			"data":     data,
+			"dataType": dataType,
+			"peerId":   peerID,
+			"location": location.Name(),
+		}).Trace("Received data from peer")
 
 		// Mark this peer as behaving well
-		p.peerManager.MarkResponsivePeer(peerID)
+		p.peerManager.MarkResponsivePeer(peerID, location)
 	} else {
 		log.Global.WithFields(log.Fields{
 			"peerId":   peerID,
 			"location": location.Name(),
 			"data":     data,
-			"datatype": datatype,
+			"dataType": dataType,
+			"err":      err,
 		}).Error("Error requesting the data from peer")
 		// Mark this peer as not responding
-		p.peerManager.MarkUnresponsivePeer(peerID)
+		p.peerManager.MarkUnresponsivePeer(peerID, location)
 	}
+	// send the block to the result channel
+	resultChan <- recvd
 }
 
 // Request a data from the network for the specified slice
 func (p *P2PNode) Request(location common.Location, requestData interface{}, responseDataType interface{}) chan interface{} {
 	resultChan := make(chan interface{}, 1)
 
-	p.requestFromPeers(location, requestData, responseDataType, resultChan)
+	go p.requestFromPeers(location, requestData, responseDataType, resultChan)
 	// TODO: optimize with waitgroups or a doneChan to only query if no peers responded
 	// Right now this creates too many streams, so don't call this until we have a better solution
 	// p.queryDHT(location, requestData, responseDataType, resultChan)
@@ -182,20 +192,22 @@ func (p *P2PNode) Request(location common.Location, requestData interface{}, res
 	return resultChan
 }
 
-func (p *P2PNode) MarkLivelyPeer(peer p2p.PeerID) {
+func (p *P2PNode) MarkLivelyPeer(peer p2p.PeerID, location common.Location) {
 	log.Global.WithFields(log.Fields{
-		"peer": peer,
+		"peer":     peer,
+		"location": location,
 	}).Debug("Recording well-behaving peer")
 
-	p.peerManager.MarkLivelyPeer(peer)
+	p.peerManager.MarkLivelyPeer(peer, location)
 }
 
-func (p *P2PNode) MarkLatentPeer(peer p2p.PeerID) {
+func (p *P2PNode) MarkLatentPeer(peer p2p.PeerID, location common.Location) {
 	log.Global.WithFields(log.Fields{
-		"peer": peer,
+		"peer":     peer,
+		"location": location,
 	}).Debug("Recording misbehaving peer")
 
-	p.peerManager.MarkLatentPeer(peer)
+	p.peerManager.MarkLatentPeer(peer, location)
 }
 
 func (p *P2PNode) ProtectPeer(peer p2p.PeerID) {

@@ -426,6 +426,7 @@ func (sl *Slice) Append(header *types.Header, domPendingHeader *types.Header, do
 		"gas":        block.GasUsed(),
 		"gasLimit":   block.GasLimit(),
 		"evmRoot":    block.EVMRoot(),
+		"etxSetHash": block.EtxSetHash(),
 		"order":      order,
 		"location":   block.Header().Location(),
 		"elapsed":    common.PrettyDuration(time.Since(start)),
@@ -1303,6 +1304,7 @@ func (sl *Slice) combinePendingHeader(header *types.Header, slPendingHeader *typ
 		combinedPendingHeader.SetUncleHash(header.UncleHash())
 		combinedPendingHeader.SetTxHash(header.TxHash())
 		combinedPendingHeader.SetEtxHash(header.EtxHash())
+		combinedPendingHeader.SetEtxSetHash(header.EtxSetHash())
 		combinedPendingHeader.SetReceiptHash(header.ReceiptHash())
 		combinedPendingHeader.SetEVMRoot(header.EVMRoot())
 		combinedPendingHeader.SetUTXORoot(header.UTXORoot())
