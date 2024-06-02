@@ -33,7 +33,7 @@ var (
 	headHeaderKey = []byte("LastHeader")
 
 	// headBlockKey tracks the latest known full block's hash.
-	headBlockKey = []byte("LastBlock")
+	headWorkObjectKey = []byte("LastWorkObject")
 
 	// headersHashKey tracks the latest known headers hash in Blockchain.
 	headsHashesKey = []byte("HeadersHash")
@@ -74,11 +74,14 @@ var (
 	// fastTxLookupLimitKey tracks the transaction lookup limit during fast sync.
 	fastTxLookupLimitKey = []byte("FastTransactionLookupLimit")
 
-	// badBlockKey tracks the list of bad blocks seen by local
-	badBlockKey = []byte("InvalidBlock")
+	// badWorkObjectKey tracks the list of bad blocks seen by local
+	badWorkObjectKey = []byte("InvalidWorkObject")
 
 	// uncleanShutdownKey tracks the list of local crashes
 	uncleanShutdownKey = []byte("unclean-shutdown") // config prefix for the db
+
+	// genesisHashesKey tracks the list of genesis hashes
+	genesisHashesKey = []byte("GenesisHashes")
 
 	// Data item prefixes (use single byte to avoid mixing data types, avoid `i`, used for indexes).
 	headerPrefix       = []byte("h") // headerPrefix + num (uint64 big endian) + hash -> header
@@ -86,31 +89,44 @@ var (
 	headerHashSuffix   = []byte("n") // headerPrefix + num (uint64 big endian) + headerHashSuffix -> hash
 	headerNumberPrefix = []byte("H") // headerNumberPrefix + hash -> num (uint64 big endian)
 
-	pendingHeaderPrefix = []byte("ph")    // pendingHeaderPrefix + hash -> header
-	candidateBodyPrefix = []byte("cb")    // candidateBodyPrefix + hash -> Body
-	pbBodyPrefix        = []byte("pb")    // pbBodyPrefix + hash -> *types.Body
-	pbBodyHashPrefix    = []byte("pbKey") // pbBodyPrefix -> []common.Hash
-	phTerminiPrefix     = []byte("pht")   // phTerminiPrefix + hash -> []common.Hash
-	phBodyPrefix        = []byte("pc")    // phBodyPrefix + hash -> []common.Hash + Td
-	terminiPrefix       = []byte("tk")    //terminiPrefix + hash -> []common.Hash
-	badHashesListPrefix = []byte("bh")
-	inboundEtxsPrefix   = []byte("ie")    // inboundEtxsPrefix + hash -> types.Transactions
-	spentUTXOsPrefix    = []byte("sutxo") // spentUTXOsPrefix + hash -> []types.SpentTxOut
-	AddressUtxosPrefix  = []byte("au")    // addressUtxosPrefix + hash -> []types.UtxoEntry
+	pendingHeaderPrefix         = []byte("ph")    // pendingHeaderPrefix + hash -> header
+	candidateBodyPrefix         = []byte("cb")    // candidateBodyPrefix + hash -> Body
+	pbBodyPrefix                = []byte("pb")    // pbBodyPrefix + hash -> *types.Body
+	pbBodyHashPrefix            = []byte("pbKey") // pbBodyPrefix -> []common.Hash
+	phTerminiPrefix             = []byte("pht")   // phTerminiPrefix + hash -> []common.Hash
+	phBodyPrefix                = []byte("pc")    // phBodyPrefix + hash -> []common.Hash + Td
+	terminiPrefix               = []byte("tk")    //terminiPrefix + hash -> []common.Hash
+	blockWorkObjectHeaderPrefix = []byte("bw")    //blockWObjectHeaderPrefix + hash -> []common.Hash
+	txWorkObjectHeaderPrefix    = []byte("tw")    //txWorkObjectHeaderPrefix + hash -> []common.Hash
+	phWorkObjectHeaderPrefix    = []byte("pw")    //phWorkObjectHeaderPrefix + hash -> []common.Hash
+	workObjectBodyPrefix        = []byte("wb")    //workObjectBodyPrefix + hash -> []common.Hash
+	blockWorkObjectPrefix       = []byte("bo")    //blockWorkObjectPrefix + hash -> []common.Hash
+	txWorkObjectPrefix          = []byte("to")    //txWorkObjectPrefix + hash -> []common.Hash
+	phWorkObjectPrefix          = []byte("po")    //phWorkObjectPrefix + hash -> []common.Hash
+	badHashesListPrefix         = []byte("bh")
+	inboundEtxsPrefix           = []byte("ie")    // inboundEtxsPrefix + hash -> types.Transactions
+	UtxoPrefix                  = []byte("ut")    // outpointPrefix + hash -> types.Outpoint
+	spentUTXOsPrefix            = []byte("sutxo") // spentUTXOsPrefix + hash -> []types.SpentTxOut
+	AddressUtxosPrefix          = []byte("au")    // addressUtxosPrefix + hash -> []types.UtxoEntry
 
-	blockBodyPrefix         = []byte("b")  // blockBodyPrefix + num (uint64 big endian) + hash -> block body
-	blockReceiptsPrefix     = []byte("r")  // blockReceiptsPrefix + num (uint64 big endian) + hash -> block receipts
-	etxSetPrefix            = []byte("e")  // etxSetPrefix + num (uint64 big endian) + hash -> EtxSet at block
-	pendingEtxsPrefix       = []byte("pe") // pendingEtxsPrefix + hash -> PendingEtxs at block
-	pendingEtxsRollupPrefix = []byte("pr") // pendingEtxsRollupPrefix + hash -> PendingEtxsRollup at block
-	manifestPrefix          = []byte("ma") // manifestPrefix + hash -> Manifest at block
-	bloomPrefix             = []byte("bl") // bloomPrefix + hash -> bloom at block
+	blockBodyPrefix         = []byte("b")   // blockBodyPrefix + num (uint64 big endian) + hash -> block body
+	blockReceiptsPrefix     = []byte("r")   // blockReceiptsPrefix + num (uint64 big endian) + hash -> block receipts
+	etxSetHashesPrefix      = []byte("e")   // etxSetPrefix + num (uint64 big endian) + hash -> EtxSetHashes at block
+	etxPrefix               = []byte("etx") // etxKey + hash -> Etx
+	pendingEtxsPrefix       = []byte("pe")  // pendingEtxsPrefix + hash -> PendingEtxs at block
+	pendingEtxsRollupPrefix = []byte("pr")  // pendingEtxsRollupPrefix + hash -> PendingEtxsRollup at block
+	manifestPrefix          = []byte("ma")  // manifestPrefix + hash -> Manifest at block
+	interlinkPrefix         = []byte("il")  // interlinkPrefix + hash -> Interlink at block
+	bloomPrefix             = []byte("bl")  // bloomPrefix + hash -> bloom at block
 
 	txLookupPrefix        = []byte("l") // txLookupPrefix + hash -> transaction/receipt lookup metadata
 	bloomBitsPrefix       = []byte("B") // bloomBitsPrefix + bit (uint16 big endian) + section (uint64 big endian) + hash -> bloom bits
 	SnapshotAccountPrefix = []byte("a") // SnapshotAccountPrefix + account hash -> account trie value
 	SnapshotStoragePrefix = []byte("o") // SnapshotStoragePrefix + account hash + storage hash -> storage trie value
 	CodePrefix            = []byte("c") // CodePrefix + code hash -> account code
+
+	expansionStatusPrefix = []byte("exp") // ExpansionStatusPrefix + block hash -> ExpansionStatus
+	efficiencyScorePrefix = []byte("es")  // EfficiencyScorePrefix + block hash -> EfficiencyScore
 
 	preimagePrefix = []byte("secure-key-")  // preimagePrefix + hash -> preimage
 	configPrefix   = []byte("quai-config-") // config prefix for the db
@@ -195,6 +211,26 @@ func headerKey(number uint64, hash common.Hash) []byte {
 // terminiKey = domPendingHeaderPrefix + hash
 func terminiKey(hash common.Hash) []byte {
 	return append(terminiPrefix, hash.Bytes()...)
+}
+
+// blockWorkObjectHeaderKey = workObjectHeaderPrefix + hash
+func blockWorkObjectHeaderKey(hash common.Hash) []byte {
+	return append(blockWorkObjectHeaderPrefix, hash.Bytes()...)
+}
+
+// txObjectHeaderKey = workObjectHeaderPrefix + hash
+func txWorkObjectHeaderKey(hash common.Hash) []byte {
+	return append(txWorkObjectHeaderPrefix, hash.Bytes()...)
+}
+
+// phObjectHeaderKey = workObjectHeaderPrefix + hash
+func phWorkObjectHeaderKey(hash common.Hash) []byte {
+	return append(phWorkObjectHeaderPrefix, hash.Bytes()...)
+}
+
+// workObjectBodyKey = workObjectBodyPrefix + hash
+func workObjectBodyKey(hash common.Hash) []byte {
+	return append(workObjectBodyPrefix, hash.Bytes()...)
 }
 
 // pendingHeaderKey = pendingHeaderPrefix + hash
@@ -282,6 +318,16 @@ func codeKey(hash common.Hash) []byte {
 	return append(CodePrefix, hash.Bytes()...)
 }
 
+// expansionStatusKey = expansionStatusPrefix + hash
+func expansionStatusKey(hash common.Hash) []byte {
+	return append(expansionStatusPrefix, hash.Bytes()...)
+}
+
+// efficiencyScoreKey = efficiencyScorePrefix + hash
+func efficiencyScoreKey(hash common.Hash) []byte {
+	return append(efficiencyScorePrefix, hash.Bytes()...)
+}
+
 // IsCodeKey reports whether the given byte slice is the key of contract code,
 // if so return the raw code hash as well.
 func IsCodeKey(key []byte) (bool, []byte) {
@@ -298,7 +344,11 @@ func configKey(hash common.Hash) []byte {
 
 // etxSetKey = etxSetPrefix + num (uint64 big endian) + hash
 func etxSetKey(number uint64, hash common.Hash) []byte {
-	return append(append(etxSetPrefix, encodeBlockNumber(number)...), hash.Bytes()...)
+	return append(append(etxSetHashesPrefix, encodeBlockNumber(number)...), hash.Bytes()...)
+}
+
+func etxKey(hash common.Hash) []byte {
+	return append(etxPrefix, hash.Bytes()...)
 }
 
 // pendingEtxsKey = pendingEtxsPrefix + hash
@@ -314,6 +364,11 @@ func pendingEtxsRollupKey(hash common.Hash) []byte {
 // manifestKey = manifestPrefix + hash
 func manifestKey(hash common.Hash) []byte {
 	return append(manifestPrefix, hash.Bytes()...)
+}
+
+// interlinkHashKey = interlinkPrefix + hash
+func interlinkHashKey(hash common.Hash) []byte {
+	return append(interlinkPrefix, hash.Bytes()...)
 }
 
 func bloomKey(hash common.Hash) []byte {

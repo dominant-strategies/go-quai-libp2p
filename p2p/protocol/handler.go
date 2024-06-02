@@ -40,22 +40,32 @@ func QuaiProtocolHandler(stream network.Stream, node QuaiP2PNode) {
 			continue
 		}
 
-		quaiMsg, err := pb.DecodeQuaiMessage(data)
-		if err != nil {
-			log.Global.Errorf("error decoding quai message: %s", err)
-			continue
+		go handleMessage(data, stream, node)
+	}
+}
+
+func handleMessage(data []byte, stream network.Stream, node QuaiP2PNode) {
+	quaiMsg, err := pb.DecodeQuaiMessage(data)
+	if err != nil {
+		log.Global.Errorf("error decoding quai message: %s", err)
+		return
+	}
+
+	switch {
+	case quaiMsg.GetRequest() != nil:
+		handleRequest(quaiMsg.GetRequest(), stream, node)
+		if messageMetrics != nil {
+			messageMetrics.WithLabelValues("requests").Inc()
 		}
 
-		switch {
-		case quaiMsg.GetRequest() != nil:
-			handleRequest(quaiMsg.GetRequest(), stream, node)
-
-		case quaiMsg.GetResponse() != nil:
-			handleResponse(quaiMsg.GetResponse(), stream, node)
-
-		default:
-			log.Global.WithField("quaiMsg", quaiMsg).Errorf("unsupported quai message type")
+	case quaiMsg.GetResponse() != nil:
+		handleResponse(quaiMsg.GetResponse(), node)
+		if messageMetrics != nil {
+			messageMetrics.WithLabelValues("responses").Inc()
 		}
+
+	default:
+		log.Global.WithField("quaiMsg", quaiMsg).Errorf("unsupported quai message type")
 	}
 }
 
@@ -69,32 +79,53 @@ func handleRequest(quaiMsg *pb.QuaiRequestMessage, stream network.Stream, node Q
 	switch query.(type) {
 	case *common.Hash:
 		log.Global.WithFields(log.Fields{
-			"requestID": id,
+			"requestID":   id,
 			"decodedType": decodedType,
-			"location":  loc,
-			"hash":      query,
-			"peer":      stream.Conn().RemotePeer(),
+			"location":    loc,
+			"hash":        query,
+			"peer":        stream.Conn().RemotePeer(),
 		}).Debug("Received request by hash to handle")
 	case *big.Int:
 		log.Global.WithFields(log.Fields{
-			"requestID": id,
+			"requestID":   id,
 			"decodedType": decodedType,
-			"location":  loc,
-			"hash":      query,
-			"peer":      stream.Conn().RemotePeer(),
+			"location":    loc,
+			"number":      query,
+			"peer":        stream.Conn().RemotePeer(),
 		}).Debug("Received request by number to handle")
 	default:
 		log.Global.Errorf("unsupported request input data field type: %T", query)
 	}
 
 	switch decodedType.(type) {
-	case *types.Block:
-		requestedHash := query.(*common.Hash)
+	case *types.WorkObject:
+		requestedHash := &common.Hash{}
+		switch query := query.(type) {
+		case *common.Hash:
+			requestedHash = query
+		case *big.Int:
+			number := query
+			log.Global.Tracef("Looking hash for block %s and location %s", number.String(), loc.Name())
+			requestedHash = node.GetBlockHashByNumber(number, loc)
+			if requestedHash == nil {
+				log.Global.Debugf("block hash not found for block %s and location %s", number.String(), loc.Name())
+				// TODO: handle error
+				return
+			}
+			log.Global.Tracef("Found hash for block %s and location: %s", number.String(), loc.Name(), requestedHash)
+		default:
+			log.Global.Errorf("unsupported query type %v", query)
+			// TODO: handle error
+			return
+		}
 		err = handleBlockRequest(id, loc, *requestedHash, stream, node)
 		if err != nil {
 			log.Global.WithField("err", err).Error("error handling block request")
 			// TODO: handle error
 			return
+		}
+		if messageMetrics != nil {
+			messageMetrics.WithLabelValues("blocks").Inc()
 		}
 	case *types.Header:
 		requestedHash := query.(*common.Hash)
@@ -104,6 +135,9 @@ func handleRequest(quaiMsg *pb.QuaiRequestMessage, stream network.Stream, node Q
 			// TODO: handle error
 			return
 		}
+		if messageMetrics != nil {
+			messageMetrics.WithLabelValues("headers").Inc()
+		}
 	case *types.Transaction:
 		requestedHash := query.(*common.Hash)
 		err = handleTransactionRequest(id, loc, *requestedHash, stream, node)
@@ -111,6 +145,9 @@ func handleRequest(quaiMsg *pb.QuaiRequestMessage, stream network.Stream, node Q
 			log.Global.WithField("err", err).Error("error handling transaction request")
 			// TODO: handle error
 			return
+		}
+		if messageMetrics != nil {
+			messageMetrics.WithLabelValues("transactions").Inc()
 		}
 	case *common.Hash:
 		number := query.(*big.Int)
@@ -133,7 +170,7 @@ func handleRequest(quaiMsg *pb.QuaiRequestMessage, stream network.Stream, node Q
 	}
 }
 
-func handleResponse(quaiResp *pb.QuaiResponseMessage, stream network.Stream, node QuaiP2PNode) {
+func handleResponse(quaiResp *pb.QuaiResponseMessage, node QuaiP2PNode) {
 	recvdID, recvdType, err := pb.DecodeQuaiResponse(quaiResp)
 	if err != nil {
 		log.Global.WithField(
@@ -156,7 +193,7 @@ func handleResponse(quaiResp *pb.QuaiResponseMessage, stream network.Stream, nod
 // Seeks the block in the cache or database and sends it to the peer in a pb.QuaiResponseMessage
 func handleBlockRequest(id uint32, loc common.Location, hash common.Hash, stream network.Stream, node QuaiP2PNode) error {
 	// check if we have the block in our cache or database
-	block := node.GetBlock(hash, loc)
+	block := node.GetWorkObject(hash, loc)
 	if block == nil {
 		log.Global.Debugf("block not found")
 		return nil

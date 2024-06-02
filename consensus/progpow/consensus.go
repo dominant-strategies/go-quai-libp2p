@@ -15,7 +15,6 @@ import (
 	"github.com/dominant-strategies/go-quai/core"
 	"github.com/dominant-strategies/go-quai/core/state"
 	"github.com/dominant-strategies/go-quai/core/types"
-	"github.com/dominant-strategies/go-quai/log"
 	"github.com/dominant-strategies/go-quai/params"
 	"github.com/dominant-strategies/go-quai/trie"
 	"modernc.org/mathutil"
@@ -66,13 +65,13 @@ var (
 
 // Author implements consensus.Engine, returning the header's coinbase as the
 // proof-of-work verified author of the block.
-func (progpow *Progpow) Author(header *types.Header) (common.Address, error) {
+func (progpow *Progpow) Author(header *types.WorkObject) (common.Address, error) {
 	return header.Coinbase(), nil
 }
 
 // VerifyHeader checks whether a header conforms to the consensus rules of the
 // stock Quai progpow engine.
-func (progpow *Progpow) VerifyHeader(chain consensus.ChainHeaderReader, header *types.Header) error {
+func (progpow *Progpow) VerifyHeader(chain consensus.ChainHeaderReader, header *types.WorkObject) error {
 	nodeCtx := progpow.NodeLocation().Context()
 	// If we're running a full engine faking, accept any input as valid
 	if progpow.config.PowMode == ModeFullFake {
@@ -94,7 +93,7 @@ func (progpow *Progpow) VerifyHeader(chain consensus.ChainHeaderReader, header *
 // VerifyHeaders is similar to VerifyHeader, but verifies a batch of headers
 // concurrently. The method returns a quit channel to abort the operations and
 // a results channel to retrieve the async verifications.
-func (progpow *Progpow) VerifyHeaders(chain consensus.ChainHeaderReader, headers []*types.Header) (chan<- struct{}, <-chan error) {
+func (progpow *Progpow) VerifyHeaders(chain consensus.ChainHeaderReader, headers []*types.WorkObject) (chan<- struct{}, <-chan error) {
 	// If we're running a full engine faking, accept any input as valid
 	if progpow.config.PowMode == ModeFullFake || len(headers) == 0 {
 		abort, results := make(chan struct{}), make(chan error, len(headers))
@@ -157,9 +156,9 @@ func (progpow *Progpow) VerifyHeaders(chain consensus.ChainHeaderReader, headers
 	return abort, errorsOut
 }
 
-func (progpow *Progpow) verifyHeaderWorker(chain consensus.ChainHeaderReader, headers []*types.Header, index int, unixNow int64) error {
+func (progpow *Progpow) verifyHeaderWorker(chain consensus.ChainHeaderReader, headers []*types.WorkObject, index int, unixNow int64) error {
 	nodeCtx := progpow.NodeLocation().Context()
-	var parent *types.Header
+	var parent *types.WorkObject
 	if index == 0 {
 		parent = chain.GetHeader(headers[0].ParentHash(nodeCtx), headers[0].NumberU64(nodeCtx)-1)
 	} else if headers[index-1].Hash() == headers[index].ParentHash(nodeCtx) {
@@ -173,7 +172,7 @@ func (progpow *Progpow) verifyHeaderWorker(chain consensus.ChainHeaderReader, he
 
 // VerifyUncles verifies that the given block's uncles conform to the consensus
 // rules of the stock Quai progpow engine.
-func (progpow *Progpow) VerifyUncles(chain consensus.ChainReader, block *types.Block) error {
+func (progpow *Progpow) VerifyUncles(chain consensus.ChainReader, block *types.WorkObject) error {
 	nodeCtx := progpow.NodeLocation().Context()
 	// If we're running a full engine faking, accept any input as valid
 	if progpow.config.PowMode == ModeFullFake {
@@ -187,7 +186,7 @@ func (progpow *Progpow) VerifyUncles(chain consensus.ChainReader, block *types.B
 		return nil
 	}
 	// Gather the set of past uncles and ancestors
-	uncles, ancestors := mapset.NewSet(), make(map[common.Hash]*types.Header)
+	uncles, ancestors := mapset.NewSet(), make(map[common.Hash]*types.WorkObject)
 
 	number, parent := block.NumberU64(nodeCtx)-1, block.ParentHash(nodeCtx)
 	for i := 0; i < 7; i++ {
@@ -199,7 +198,7 @@ func (progpow *Progpow) VerifyUncles(chain consensus.ChainReader, block *types.B
 		// If the ancestor doesn't have any uncles, we don't have to iterate them
 		if ancestorHeader.UncleHash() != types.EmptyUncleHash {
 			// Need to add those uncles to the banned list too
-			ancestor := chain.GetBlock(parent, number)
+			ancestor := chain.GetWorkObject(parent)
 			if ancestor == nil {
 				break
 			}
@@ -209,7 +208,7 @@ func (progpow *Progpow) VerifyUncles(chain consensus.ChainReader, block *types.B
 		}
 		parent, number = ancestorHeader.ParentHash(nodeCtx), number-1
 	}
-	ancestors[block.Hash()] = block.Header()
+	ancestors[block.Hash()] = block
 	uncles.Add(block.Hash())
 
 	// Verify each of the uncles that it's recent, but not an ancestor
@@ -225,22 +224,39 @@ func (progpow *Progpow) VerifyUncles(chain consensus.ChainReader, block *types.B
 		if ancestors[hash] != nil {
 			return errUncleIsAncestor
 		}
-		if ancestors[uncle.ParentHash(nodeCtx)] == nil || uncle.ParentHash(nodeCtx) == block.ParentHash(nodeCtx) {
+		if ancestors[uncle.ParentHash()] == nil || uncle.ParentHash() == block.ParentHash(nodeCtx) {
 			return errDanglingUncle
 		}
-		if err := progpow.verifyHeader(chain, uncle, ancestors[uncle.ParentHash(nodeCtx)], true, time.Now().Unix()); err != nil {
+		// Verify the seal and get the powHash for the given header
+		_, err := progpow.verifySeal(uncle)
+		if err != nil {
 			return err
+		}
+
+		// Verify the block's difficulty based on its timestamp and parent's difficulty
+		// difficulty adjustment can only be checked in zone
+		if nodeCtx == common.ZONE_CTX {
+			parent := chain.GetHeaderByHash(uncle.ParentHash())
+			expected := progpow.CalcDifficulty(chain, parent.WorkObjectHeader())
+			if expected.Cmp(uncle.Difficulty()) != 0 {
+				return fmt.Errorf("uncle has invalid difficulty: have %v, want %v", uncle.Difficulty(), expected)
+			}
 		}
 	}
 	return nil
 }
 
 // verifyHeader checks whether a header conforms to the consensus rules
-func (progpow *Progpow) verifyHeader(chain consensus.ChainHeaderReader, header, parent *types.Header, uncle bool, unixNow int64) error {
+func (progpow *Progpow) verifyHeader(chain consensus.ChainHeaderReader, header, parent *types.WorkObject, uncle bool, unixNow int64) error {
 	nodeCtx := progpow.NodeLocation().Context()
 	// Ensure that the header's extra-data section is of a reasonable size
 	if uint64(len(header.Extra())) > params.MaximumExtraDataSize {
 		return fmt.Errorf("extra-data too long: %d > %d", len(header.Extra()), params.MaximumExtraDataSize)
+	}
+	// verify that the hash of the header in the Body matches the header hash specified in the work object header
+	expectedHeaderHash := header.Body().Header().Hash()
+	if header.HeaderHash() != expectedHeaderHash {
+		return fmt.Errorf("invalid header hash: have %v, want %v", header.HeaderHash(), expectedHeaderHash)
 	}
 	// Verify the header's timestamp
 	if !uncle {
@@ -254,7 +270,7 @@ func (progpow *Progpow) verifyHeader(chain consensus.ChainHeaderReader, header, 
 	// Verify the block's difficulty based on its timestamp and parent's difficulty
 	// difficulty adjustment can only be checked in zone
 	if nodeCtx == common.ZONE_CTX {
-		expected := progpow.CalcDifficulty(chain, parent)
+		expected := progpow.CalcDifficulty(chain, parent.WorkObjectHeader())
 		if expected.Cmp(header.Difficulty()) != 0 {
 			return fmt.Errorf("invalid difficulty: have %v, want %v", header.Difficulty(), expected)
 		}
@@ -272,7 +288,7 @@ func (progpow *Progpow) verifyHeader(chain consensus.ChainHeaderReader, header, 
 		return fmt.Errorf("block location is not in the same slice as the node location")
 	}
 	// Verify that the parent entropy is calculated correctly on the header
-	parentEntropy := progpow.TotalLogS(parent)
+	parentEntropy := progpow.TotalLogS(chain, parent)
 	if parentEntropy.Cmp(header.ParentEntropy(nodeCtx)) != 0 {
 		return fmt.Errorf("invalid parent entropy: have %v, want %v", header.ParentEntropy(nodeCtx), parentEntropy)
 	}
@@ -285,12 +301,94 @@ func (progpow *Progpow) verifyHeader(chain consensus.ChainHeaderReader, header, 
 				return fmt.Errorf("invalid parent delta s: have %v, want %v", header.ParentDeltaS(nodeCtx), common.Big0)
 			}
 		} else {
-			parentDeltaS := progpow.DeltaLogS(parent)
+			parentDeltaS := progpow.DeltaLogS(chain, parent)
 			if parentDeltaS.Cmp(header.ParentDeltaS(nodeCtx)) != 0 {
 				return fmt.Errorf("invalid parent delta s: have %v, want %v", header.ParentDeltaS(nodeCtx), parentDeltaS)
 			}
 		}
 	}
+	// If not prime, verify the parentUncledSubDeltaS field as well
+	if nodeCtx > common.PRIME_CTX {
+		_, parentOrder, _ := progpow.CalcOrder(parent)
+		// If parent was dom, parent uncled sub deltaS is zero and otherwise should be the calc parent uncled sub delta s on the parent
+		if parentOrder < nodeCtx {
+			if common.Big0.Cmp(header.ParentUncledSubDeltaS(nodeCtx)) != 0 {
+				return fmt.Errorf("invalid parent uncled sub delta s: have %v, want %v", header.ParentUncledSubDeltaS(nodeCtx), common.Big0)
+			}
+		} else {
+			expectedParentUncledSubDeltaS := progpow.UncledSubDeltaLogS(chain, parent)
+			if expectedParentUncledSubDeltaS.Cmp(header.ParentUncledSubDeltaS(nodeCtx)) != 0 {
+				return fmt.Errorf("invalid parent uncled sub delta s: have %v, want %v", header.ParentUncledSubDeltaS(nodeCtx), expectedParentUncledSubDeltaS)
+			}
+		}
+	}
+	// verify efficiency score, threshold count and the expansion number, on every prime block
+	if nodeCtx == common.PRIME_CTX {
+		if parent.NumberU64(nodeCtx) == 0 {
+			if header.EfficiencyScore() != 0 {
+				return fmt.Errorf("invalid efficiency score: have %v, want %v", header.EfficiencyScore(), 0)
+			}
+			if header.ThresholdCount() != 0 {
+				return fmt.Errorf("invalid threshold count: have %v, want %v", header.ThresholdCount(), 0)
+			}
+			if header.ExpansionNumber() != 0 {
+				return fmt.Errorf("invalid expansion number: have %v, want %v", header.ExpansionNumber(), 0)
+			}
+		} else {
+			expectedEfficiencyScore := chain.ComputeEfficiencyScore(parent)
+			if header.EfficiencyScore() != expectedEfficiencyScore {
+				return fmt.Errorf("invalid efficiency score: have %v, want %v", header.EfficiencyScore(), expectedEfficiencyScore)
+			}
+
+			var expectedThresholdCount uint16
+			if parent.ThresholdCount() == 0 {
+				// If the threshold count is zero we have not started considering for the
+				// expansion
+				if expectedEfficiencyScore > params.TREE_EXPANSION_THRESHOLD {
+					expectedThresholdCount = parent.ThresholdCount() + 1
+				} else {
+					expectedThresholdCount = 0
+				}
+			} else {
+				// If the efficiency score goes below the threshold,  and we still have
+				// not triggered the expansion, reset the threshold count or if we go
+				// past the tree expansion trigger window we have to reset the
+				// threshold count
+				if (parent.ThresholdCount() < params.TREE_EXPANSION_TRIGGER_WINDOW && expectedEfficiencyScore < params.TREE_EXPANSION_THRESHOLD) ||
+					parent.ThresholdCount() >= params.TREE_EXPANSION_TRIGGER_WINDOW+params.TREE_EXPANSION_WAIT_COUNT {
+					expectedThresholdCount = 0
+				} else {
+					expectedThresholdCount = parent.ThresholdCount() + 1
+				}
+			}
+			if header.ThresholdCount() != expectedThresholdCount {
+				return fmt.Errorf("invalid threshold count: have %v, want %v", header.ThresholdCount(), expectedThresholdCount)
+			}
+
+			var expectedExpansionNumber uint8
+			if parent.ThresholdCount() >= params.TREE_EXPANSION_TRIGGER_WINDOW+params.TREE_EXPANSION_WAIT_COUNT {
+				expectedExpansionNumber = parent.ExpansionNumber() + 1
+			} else {
+				expectedExpansionNumber = parent.ExpansionNumber()
+			}
+			if header.ExpansionNumber() != expectedExpansionNumber {
+				return fmt.Errorf("invalid expansion number: have %v, want %v", header.ExpansionNumber(), expectedExpansionNumber)
+			}
+		}
+	}
+	// verify the etx eligible slices in zone and prime ctx
+	if nodeCtx == common.PRIME_CTX {
+		var expectedEtxEligibleSlices common.Hash
+		if !chain.IsGenesisHash(parent.Hash()) {
+			expectedEtxEligibleSlices = chain.UpdateEtxEligibleSlices(parent, parent.Location())
+		} else {
+			expectedEtxEligibleSlices = parent.EtxEligibleSlices()
+		}
+		if header.EtxEligibleSlices() != expectedEtxEligibleSlices {
+			return fmt.Errorf("invalid etx eligible slices: have %v, want %v", header.EtxEligibleSlices(), expectedEtxEligibleSlices)
+		}
+	}
+
 	if nodeCtx == common.ZONE_CTX {
 		// check if the header coinbase is in scope
 		_, err := header.Coinbase().InternalAddress()
@@ -323,9 +421,28 @@ func (progpow *Progpow) verifyHeader(chain consensus.ChainHeaderReader, header, 
 			return fmt.Errorf("invalid baseFee: have %s, want %s, parentBaseFee %s, parentGasUsed %d",
 				expectedBaseFee, header.BaseFee(), parent.BaseFee(), parent.GasUsed())
 		}
+		var expectedPrimeTerminus common.Hash
+		_, parentOrder, _ := progpow.CalcOrder(parent)
+		if parentOrder == common.PRIME_CTX {
+			expectedPrimeTerminus = parent.Hash()
+		} else {
+			if chain.IsGenesisHash(parent.Hash()) {
+				expectedPrimeTerminus = parent.Hash()
+			} else {
+				expectedPrimeTerminus = parent.PrimeTerminus()
+			}
+		}
+		if header.PrimeTerminus() != expectedPrimeTerminus {
+			return fmt.Errorf("invalid primeTerminus: have %v, want %v", header.PrimeTerminus(), expectedPrimeTerminus)
+		}
 	}
 	// Verify that the block number is parent's +1
-	if diff := new(big.Int).Sub(header.Number(nodeCtx), parent.Number(nodeCtx)); diff.Cmp(big.NewInt(1)) != 0 {
+	parentNumber := parent.Number(nodeCtx)
+	if chain.IsGenesisHash(parent.Hash()) {
+		parentNumber = big.NewInt(0)
+	}
+	// Verify that the block number is parent's +1
+	if diff := new(big.Int).Sub(header.Number(nodeCtx), parentNumber); diff.Cmp(big.NewInt(1)) != 0 {
 		return consensus.ErrInvalidNumber
 	}
 	return nil
@@ -334,7 +451,7 @@ func (progpow *Progpow) verifyHeader(chain consensus.ChainHeaderReader, header, 
 // CalcDifficulty is the difficulty adjustment algorithm. It returns
 // the difficulty that a new block should have when created at time
 // given the parent block's time and difficulty.
-func (progpow *Progpow) CalcDifficulty(chain consensus.ChainHeaderReader, parent *types.Header) *big.Int {
+func (progpow *Progpow) CalcDifficulty(chain consensus.ChainHeaderReader, parent *types.WorkObjectHeader) *big.Int {
 	nodeCtx := progpow.NodeLocation().Context()
 
 	if nodeCtx != common.ZONE_CTX {
@@ -347,11 +464,12 @@ func (progpow *Progpow) CalcDifficulty(chain consensus.ChainHeaderReader, parent
 	///// k = Floor(BinaryLog(parent.Difficulty()))/(DurationLimit*DifficultyAdjustmentFactor*AdjustmentPeriod)
 	///// Difficulty = Max(parent.Difficulty() + e * k, MinimumDifficulty)
 
-	if parent.Hash() == chain.Config().GenesisHash {
-		return parent.Difficulty()
+	if chain.IsGenesisHash(parent.Hash()) {
+		// Genesis Difficulty is the difficulty in the Genesis Block divided by the number of total slices active
+		return new(big.Int).Div(parent.Difficulty(), big.NewInt(int64((progpow.NodeLocation().Region()+1)*(progpow.NodeLocation().Zone()+1))))
 	}
-	parentOfParent := chain.GetHeaderByHash(parent.ParentHash(nodeCtx))
-	if parentOfParent == nil || parentOfParent.Hash() == chain.Config().GenesisHash {
+	parentOfParent := chain.GetHeaderByHash(parent.ParentHash())
+	if parentOfParent == nil || chain.IsGenesisHash(parentOfParent.Hash()) {
 		return parent.Difficulty()
 	}
 
@@ -378,7 +496,7 @@ func (progpow *Progpow) CalcDifficulty(chain consensus.ChainHeaderReader, parent
 	return x
 }
 
-func (progpow *Progpow) IsDomCoincident(chain consensus.ChainHeaderReader, header *types.Header) bool {
+func (progpow *Progpow) IsDomCoincident(chain consensus.ChainHeaderReader, header *types.WorkObject) bool {
 	_, order, err := progpow.CalcOrder(header)
 	if err != nil {
 		return false
@@ -386,8 +504,7 @@ func (progpow *Progpow) IsDomCoincident(chain consensus.ChainHeaderReader, heade
 	return order < chain.Config().Location.Context()
 }
 
-func (progpow *Progpow) ComputePowLight(header *types.Header) (mixHash, powHash common.Hash) {
-	nodeCtx := progpow.config.NodeLocation.Context()
+func (progpow *Progpow) ComputePowLight(header *types.WorkObjectHeader) (mixHash, powHash common.Hash) {
 	powLight := func(size uint64, cache []uint32, hash []byte, nonce uint64, blockNumber uint64) ([]byte, []byte) {
 		ethashCache := progpow.cache(blockNumber)
 		if ethashCache.cDag == nil {
@@ -397,9 +514,9 @@ func (progpow *Progpow) ComputePowLight(header *types.Header) (mixHash, powHash 
 		}
 		return progpowLight(size, cache, hash, nonce, blockNumber, ethashCache.cDag)
 	}
-	cache := progpow.cache(header.NumberU64(nodeCtx))
-	size := datasetSize(header.NumberU64(nodeCtx))
-	digest, result := powLight(size, cache.cache, header.SealHash().Bytes(), header.NonceU64(), header.NumberU64(common.ZONE_CTX))
+	cache := progpow.cache(header.NumberU64())
+	size := datasetSize(header.NumberU64())
+	digest, result := powLight(size, cache.cache, header.SealHash().Bytes(), header.NonceU64(), header.NumberU64())
 	mixHash = common.BytesToHash(digest)
 	powHash = common.BytesToHash(result)
 	header.PowDigest.Store(mixHash)
@@ -413,19 +530,18 @@ func (progpow *Progpow) ComputePowLight(header *types.Header) (mixHash, powHash 
 }
 
 // VerifySeal returns the PowHash and the verifySeal output
-func (progpow *Progpow) VerifySeal(header *types.Header) (common.Hash, error) {
+func (progpow *Progpow) VerifySeal(header *types.WorkObjectHeader) (common.Hash, error) {
 	return progpow.verifySeal(header)
 }
 
 // verifySeal checks whether a block satisfies the PoW difficulty requirements,
 // either using the usual progpow cache for it, or alternatively using a full DAG
 // to make remote mining fast.
-func (progpow *Progpow) verifySeal(header *types.Header) (common.Hash, error) {
-	nodeCtx := progpow.NodeLocation().Context()
+func (progpow *Progpow) verifySeal(header *types.WorkObjectHeader) (common.Hash, error) {
 	// If we're running a fake PoW, accept any seal as valid
 	if progpow.config.PowMode == ModeFake || progpow.config.PowMode == ModeFullFake {
 		time.Sleep(progpow.fakeDelay)
-		if progpow.fakeFail == header.NumberU64(nodeCtx) {
+		if progpow.fakeFail == header.NumberU64() {
 			return common.Hash{}, errInvalidPoW
 		}
 		return common.Hash{}, nil
@@ -457,20 +573,18 @@ func (progpow *Progpow) verifySeal(header *types.Header) (common.Hash, error) {
 
 // Prepare implements consensus.Engine, initializing the difficulty field of a
 // header to conform to the progpow protocol. The changes are done inline.
-func (progpow *Progpow) Prepare(chain consensus.ChainHeaderReader, header *types.Header, parent *types.Header) error {
-	header.SetDifficulty(progpow.CalcDifficulty(chain, parent))
+func (progpow *Progpow) Prepare(chain consensus.ChainHeaderReader, header *types.WorkObject, parent *types.WorkObject) error {
+	header.WorkObjectHeader().SetDifficulty(progpow.CalcDifficulty(chain, parent.WorkObjectHeader()))
 	return nil
 }
 
 // Finalize implements consensus.Engine, accumulating the block and uncle rewards,
 // setting the final state on the header
-func (progpow *Progpow) Finalize(chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header) {
-	// Accumulate any block and uncle rewards and commit the final state root
-	accumulateRewards(chain.Config(), state, header, uncles, progpow.logger)
+func (progpow *Progpow) Finalize(chain consensus.ChainHeaderReader, header *types.WorkObject, state *state.StateDB) {
 	nodeLocation := progpow.NodeLocation()
 	nodeCtx := progpow.NodeLocation().Context()
 
-	if nodeCtx == common.ZONE_CTX && header.ParentHash(nodeCtx) == chain.Config().GenesisHash {
+	if nodeCtx == common.ZONE_CTX && chain.IsGenesisHash(header.ParentHash(nodeCtx)) {
 		alloc := core.ReadGenesisAlloc("genallocs/gen_alloc_"+nodeLocation.Name()+".json", progpow.logger)
 		progpow.logger.WithField("alloc", len(alloc)).Info("Allocating genesis accounts")
 
@@ -492,66 +606,26 @@ func (progpow *Progpow) Finalize(chain consensus.ChainHeaderReader, header *type
 				continue
 			}
 		}
+		core.AddGenesisUtxos(state, nodeLocation, progpow.logger)
 	}
-	header.SetUTXORoot(state.UTXORoot())
-	header.SetEVMRoot(state.IntermediateRoot(true))
+	header.Header().SetUTXORoot(state.UTXORoot())
+	header.Header().SetEVMRoot(state.IntermediateRoot(true))
 }
 
 // FinalizeAndAssemble implements consensus.Engine, accumulating the block and
 // uncle rewards, setting the final state and assembling the block.
-func (progpow *Progpow) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header, etxs []*types.Transaction, subManifest types.BlockManifest, receipts []*types.Receipt) (*types.Block, error) {
-	nodeCtx := progpow.NodeLocation().Context()
+func (progpow *Progpow) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *types.WorkObject, state *state.StateDB, txs []*types.Transaction, uncles []*types.WorkObjectHeader, etxs []*types.Transaction, subManifest types.BlockManifest, receipts []*types.Receipt) (*types.WorkObject, error) {
+	nodeCtx := progpow.config.NodeLocation.Context()
 	if nodeCtx == common.ZONE_CTX && chain.ProcessingState() {
 		// Finalize block
-		progpow.Finalize(chain, header, state, txs, uncles)
+		progpow.Finalize(chain, header, state)
 	}
 
+	woBody := types.NewWorkObjectBody(header.Header(), txs, etxs, uncles, subManifest, receipts, trie.NewStackTrie(nil), nodeCtx)
 	// Header seems complete, assemble into a block and return
-	return types.NewBlock(header, txs, uncles, etxs, subManifest, receipts, trie.NewStackTrie(nil), nodeCtx), nil
+	return types.NewWorkObject(header.WorkObjectHeader(), woBody, nil, types.BlockObject), nil
 }
 
 func (progpow *Progpow) NodeLocation() common.Location {
 	return progpow.config.NodeLocation
-}
-
-// AccumulateRewards credits the coinbase of the given block with the mining
-// reward. The total reward consists of the static block reward and rewards for
-// included uncles. The coinbase of each uncle block is also rewarded.
-func accumulateRewards(config *params.ChainConfig, state *state.StateDB, header *types.Header, uncles []*types.Header, logger *log.Logger) {
-	// Select the correct block reward based on chain progression
-	blockReward := misc.CalculateReward(header)
-	nodeCtx := config.Location.Context()
-
-	coinbase, err := header.Coinbase().InternalAddress()
-	if err != nil {
-		logger.WithField("hash", header.Hash().String()).Error("Block has out-of-scope coinbase, skipping block reward")
-		return
-	}
-	if !header.Coinbase().IsInQuaiLedgerScope() {
-		logger.WithFields(log.Fields{
-			"Address": header.Coinbase().String(),
-			"Hash":    header.Hash().String(),
-		}).Debug("Block coinbase is in Qi ledger, skipping Quai block reward") // this log is largely unnecessary
-		return
-	}
-
-	// Accumulate the rewards for the miner and any included uncles
-	reward := new(big.Int).Set(blockReward)
-	r := new(big.Int)
-	for _, uncle := range uncles {
-		coinbase, err := uncle.Coinbase().InternalAddress()
-		if err != nil {
-			logger.WithField("hash", uncle.Hash().String()).Error("Uncle has out-of-scope coinbase, skipping reward")
-			continue
-		}
-		r.Add(uncle.Number(nodeCtx), big8)
-		r.Sub(r, header.Number(nodeCtx))
-		r.Mul(r, blockReward)
-		r.Div(r, big8)
-		state.AddBalance(coinbase, r)
-
-		r.Div(blockReward, big32)
-		reward.Add(reward, r)
-	}
-	state.AddBalance(coinbase, reward)
 }

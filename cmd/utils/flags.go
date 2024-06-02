@@ -6,9 +6,12 @@ import (
 	"fmt"
 	"math"
 	"math/big"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	godebug "runtime/debug"
 	"strconv"
 	"strings"
@@ -86,6 +89,7 @@ var NodeFlags = []Flag{
 	UnlockedAccountFlag,
 	PasswordFileFlag,
 	VMEnableDebugFlag,
+	PprofFlag,
 	InsecureUnlockAllowedFlag,
 	GpoBlocksFlag,
 	GpoPercentileFlag,
@@ -98,6 +102,7 @@ var NodeFlags = []Flag{
 	QuaiStatsURLFlag,
 	SendFullStatsFlag,
 	IndexAddressUtxos,
+	StartingExpansionNumberFlag,
 }
 
 var TXPoolFlags = []Flag{
@@ -465,6 +470,12 @@ var (
 		Usage: "Record information useful for VM and contract debugging" + generateEnvDoc(c_NodeFlagPrefix+"vmdebug"),
 	}
 
+	PprofFlag = Flag{
+		Name:  "pprof",
+		Value: false,
+		Usage: "Enable the pprof HTTP server",
+	}
+
 	InsecureUnlockAllowedFlag = Flag{
 		Name:  c_NodeFlagPrefix + "allow-insecure-unlock",
 		Value: false,
@@ -535,6 +546,12 @@ var (
 		Name:  c_NodeFlagPrefix + "sendfullstats",
 		Value: false,
 		Usage: "Send full stats boolean flag for quaistats" + generateEnvDoc(c_NodeFlagPrefix+"sendfullstats"),
+	}
+
+	StartingExpansionNumberFlag = Flag{
+		Name:  c_NodeFlagPrefix + "starting-expansion-num",
+		Value: 0,
+		Usage: "Start the node at the expansion number preferred" + generateEnvDoc(c_NodeFlagPrefix+"starting-expansion-num"),
 	}
 )
 
@@ -769,19 +786,7 @@ func setHTTP(cfg *node.Config, nodeLocation common.Location) {
 		}
 	}
 
-	getHttpPort := func() int {
-		switch nodeLocation.Context() {
-		case common.PRIME_CTX:
-			return 9001
-		case common.REGION_CTX:
-			return 9002 + nodeLocation.Region()
-		case common.ZONE_CTX:
-			return 9100 + 20*nodeLocation.Region() + nodeLocation.Zone()
-		}
-		panic("node location is not valid")
-	}
-
-	cfg.HTTPPort = getHttpPort()
+	cfg.HTTPPort = GetHttpPort(nodeLocation)
 
 	if viper.IsSet(HTTPCORSDomainFlag.Name) {
 		cfg.HTTPCors = SplitAndTrim(viper.GetString(HTTPCORSDomainFlag.Name))
@@ -800,6 +805,18 @@ func setHTTP(cfg *node.Config, nodeLocation common.Location) {
 	}
 }
 
+func GetHttpPort(nodeLocation common.Location) int {
+	switch nodeLocation.Context() {
+	case common.PRIME_CTX:
+		return 9001
+	case common.REGION_CTX:
+		return 9002 + nodeLocation.Region()
+	case common.ZONE_CTX:
+		return 9100 + 20*nodeLocation.Region() + nodeLocation.Zone()
+	}
+	panic("node location is not valid")
+}
+
 // setWS creates the WebSocket RPC listener interface string from the set
 // command line flags, returning empty if the HTTP endpoint is disabled.
 func setWS(cfg *node.Config, nodeLocation common.Location) {
@@ -810,19 +827,7 @@ func setWS(cfg *node.Config, nodeLocation common.Location) {
 		}
 	}
 
-	getWsPort := func() int {
-		switch nodeLocation.Context() {
-		case common.PRIME_CTX:
-			return 8001
-		case common.REGION_CTX:
-			return 8002 + nodeLocation.Region()
-		case common.ZONE_CTX:
-			return 8100 + 20*nodeLocation.Region() + nodeLocation.Zone()
-		}
-		panic("node location is not valid")
-	}
-
-	cfg.WSPort = getWsPort()
+	cfg.WSPort = GetWSPort(nodeLocation)
 
 	if viper.IsSet(WSAllowedOriginsFlag.Name) {
 		cfg.WSOrigins = SplitAndTrim(viper.GetString(WSAllowedOriginsFlag.Name))
@@ -835,6 +840,18 @@ func setWS(cfg *node.Config, nodeLocation common.Location) {
 	if viper.IsSet(WSPathPrefixFlag.Name) {
 		cfg.WSPathPrefix = viper.GetString(WSPathPrefixFlag.Name)
 	}
+}
+
+func GetWSPort(nodeLocation common.Location) int {
+	switch nodeLocation.Context() {
+	case common.PRIME_CTX:
+		return 8001
+	case common.REGION_CTX:
+		return 8002 + nodeLocation.Region()
+	case common.ZONE_CTX:
+		return 8100 + 20*nodeLocation.Region() + nodeLocation.Zone()
+	}
+	panic("node location is not valid")
 }
 
 // setDomUrl sets the dominant chain websocket url.
@@ -853,24 +870,21 @@ func setDomUrl(cfg *quaiconfig.Config, nodeLocation common.Location, logger *log
 }
 
 // setSubUrls sets the subordinate chain urls
-func setSubUrls(cfg *quaiconfig.Config, nodeLocation common.Location) {
+func setSubUrls(cfg *quaiconfig.Config, nodeLocation common.Location, currentExpansionNumber uint8) {
 	// only set the sub urls if its not the zone
-	slicesRunning := cfg.SlicesRunning
+	currentRegions, currentZones := common.GetHierarchySizeForExpansionNumber(currentExpansionNumber)
 	switch nodeLocation.Context() {
 	case common.PRIME_CTX:
-		subUrls := []string{}
-		regionsRunning := getRegionsRunning(slicesRunning)
-		for _, region := range regionsRunning {
-			subUrls = append(subUrls, fmt.Sprintf("ws://127.0.0.1:%d", 8002+int(region)))
+		subUrls := make([]string, common.MaxWidth)
+		for i := 0; i < int(currentRegions); i++ {
+			subUrls[i] = fmt.Sprintf("ws://127.0.0.1:%d", 8002+int(i))
 		}
 		cfg.SubUrls = subUrls
 	case common.REGION_CTX:
-		suburls := []string{}
+		suburls := make([]string, common.MaxWidth)
 		// Add the zones belonging to the region into the suburls list
-		for _, slice := range slicesRunning {
-			if slice.Region() == nodeLocation.Region() {
-				suburls = append(suburls, fmt.Sprintf("ws://127.0.0.1:%d", 8100+20*slice.Region()+slice.Zone()))
-			}
+		for i := 0; i < int(currentZones); i++ {
+			suburls[i] = fmt.Sprintf("ws://127.0.0.1:%d", 8100+20*nodeLocation.Region()+i)
 		}
 		cfg.SubUrls = suburls
 	}
@@ -1212,10 +1226,20 @@ func CheckExclusive(args ...interface{}) {
 	}
 }
 
+func EnablePprof() {
+	runtime.SetBlockProfileRate(1)
+	runtime.SetMutexProfileFraction(1)
+	port := "8085"
+	go func() {
+		log.Global.Print(http.ListenAndServe("localhost:"+port, nil))
+	}()
+}
+
 // SetQuaiConfig applies quai-related command line flags to the config.
-func SetQuaiConfig(stack *node.Node, cfg *quaiconfig.Config, slicesRunning []common.Location, nodeLocation common.Location, logger *log.Logger) {
+func SetQuaiConfig(stack *node.Node, cfg *quaiconfig.Config, slicesRunning []common.Location, nodeLocation common.Location, currentExpansionNumber uint8, logger *log.Logger) {
 	cfg.NodeLocation = nodeLocation
 	cfg.SlicesRunning = slicesRunning
+
 	// only set etherbase if its a zone chain
 	if len(nodeLocation) == 2 {
 		setEtherbase(cfg)
@@ -1237,7 +1261,7 @@ func SetQuaiConfig(stack *node.Node, cfg *quaiconfig.Config, slicesRunning []com
 	setDomUrl(cfg, nodeLocation, logger)
 
 	// set the subordinate chain websocket urls
-	setSubUrls(cfg, nodeLocation)
+	setSubUrls(cfg, nodeLocation, currentExpansionNumber)
 
 	// set the gas limit ceil
 	setGasLimitCeil(cfg)
@@ -1337,26 +1361,52 @@ func SetQuaiConfig(stack *node.Node, cfg *quaiconfig.Config, slicesRunning []com
 			cfg.NetworkId = 1
 		}
 		cfg.Genesis = core.DefaultColosseumGenesisBlock(cfg.ConsensusEngine)
+		if cfg.ConsensusEngine == "progpow" {
+			cfg.DefaultGenesisHash = params.ProgpowColosseumGenesisHash
+		} else {
+			cfg.DefaultGenesisHash = params.Blake3PowColosseumGenesisHash
+		}
+
 	case params.GardenName:
 		if !viper.IsSet(NetworkIdFlag.Name) {
 			cfg.NetworkId = 2
 		}
 		cfg.Genesis = core.DefaultGardenGenesisBlock(cfg.ConsensusEngine)
+		if cfg.ConsensusEngine == "progpow" {
+			cfg.DefaultGenesisHash = params.ProgpowGardenGenesisHash
+		} else {
+			cfg.DefaultGenesisHash = params.Blake3PowGardenGenesisHash
+		}
 	case params.OrchardName:
 		if !viper.IsSet(NetworkIdFlag.Name) {
 			cfg.NetworkId = 3
 		}
 		cfg.Genesis = core.DefaultOrchardGenesisBlock(cfg.ConsensusEngine)
+		if cfg.ConsensusEngine == "progpow" {
+			cfg.DefaultGenesisHash = params.ProgpowOrchardGenesisHash
+		} else {
+			cfg.DefaultGenesisHash = params.Blake3PowOrchardGenesisHash
+		}
 	case params.LocalName:
 		if !viper.IsSet(NetworkIdFlag.Name) {
 			cfg.NetworkId = 4
 		}
 		cfg.Genesis = core.DefaultLocalGenesisBlock(cfg.ConsensusEngine)
+		if cfg.ConsensusEngine == "progpow" {
+			cfg.DefaultGenesisHash = params.ProgpowLocalGenesisHash
+		} else {
+			cfg.DefaultGenesisHash = params.Blake3PowLocalGenesisHash
+		}
 	case params.LighthouseName:
 		if !viper.IsSet(NetworkIdFlag.Name) {
 			cfg.NetworkId = 5
 		}
 		cfg.Genesis = core.DefaultLighthouseGenesisBlock(cfg.ConsensusEngine)
+		if cfg.ConsensusEngine == "progpow" {
+			cfg.DefaultGenesisHash = params.ProgpowLighthouseGenesisHash
+		} else {
+			cfg.DefaultGenesisHash = params.Blake3PowLighthouseGenesisHash
+		}
 	case params.DevName:
 		if !viper.IsSet(NetworkIdFlag.Name) {
 			cfg.NetworkId = 1337
@@ -1379,9 +1429,7 @@ func SetQuaiConfig(stack *node.Node, cfg *quaiconfig.Config, slicesRunning []com
 		cfg.Genesis.Nonce = viper.GetUint64(GenesisNonceFlag.Name)
 	}
 
-	logger.WithField("node", cfg.Genesis.Config.Location).Info("Setting genesis Location")
 	cfg.Genesis.Config.Location = nodeLocation
-	logger.WithField("genesis", cfg.Genesis.Config.Location).Info("Location after setting")
 }
 
 func SplitTagsFlag(tagsFlag string) map[string]string {
@@ -1411,7 +1459,7 @@ func MakeChainDatabase(stack *node.Node, readonly bool) ethdb.Database {
 		chainDb ethdb.Database
 	)
 	name := "chaindata"
-	chainDb, err = stack.OpenDatabaseWithFreezer(name, cache, handles, viper.GetString(AncientDirFlag.Name), "", readonly)
+	chainDb, err = stack.OpenDatabaseWithFreezer(name, cache, handles, viper.GetString(AncientDirFlag.Name), "", readonly, stack.Config().NodeLocation)
 	if err != nil {
 		Fatalf("Could not open database: %v", err)
 	}

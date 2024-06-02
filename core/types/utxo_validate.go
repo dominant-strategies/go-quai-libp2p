@@ -1,6 +1,8 @@
 package types
 
 import (
+	"bytes"
+
 	"github.com/dominant-strategies/go-quai/common"
 )
 
@@ -12,16 +14,31 @@ import (
 //
 // This function only differs from IsCoinBase in that it works with a raw wire
 // transaction as opposed to a higher level util transaction.
-func IsCoinBaseTx(tx *Transaction, parentHash common.Hash) bool {
-	if tx == nil || tx.inner == nil || tx.Type() != QiTxType {
+func IsCoinBaseTx(tx *Transaction, parentHash common.Hash, location common.Location) bool {
+	if tx == nil || tx.inner == nil {
 		return false
+	}
+	if tx.Type() == QuaiTxType {
+		// Quai coinbase tx have specific data in the data field
+		// This transaction must also be the first in the block
+		// NOTE: A miner must not replace their coinbase with a real transaction without checking this field!
+		if bytes.Equal(tx.Data(), common.Hex2Bytes("Quai block reward")) {
+			return true
+		} else {
+			return false
+		}
 	}
 	// A coin base must only have one transaction input.
 	if len(tx.inner.txIn()) != 1 {
 		return false
 	}
 
-	// The previous output of a coin base must have a max value index and a zero hash.
+	// The coinbase transaction input must be the parent hash encoded with the proper origin location
+	origin := (uint8(location[0]) * 16) + uint8(location[1])
+	parentHash[0] = origin
+	parentHash[1] = origin
+
+	// The previous output of a coin base must have a max value index and the parent hash.
 	prevOut := &tx.inner.txIn()[0].PreviousOutPoint
 	if prevOut.Index != MaxOutputIndex || prevOut.TxHash != parentHash {
 		return false

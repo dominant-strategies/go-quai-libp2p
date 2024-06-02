@@ -27,6 +27,7 @@ import (
 
 	"github.com/dominant-strategies/go-quai/common"
 	"github.com/dominant-strategies/go-quai/common/prque"
+	"github.com/dominant-strategies/go-quai/consensus"
 	"github.com/dominant-strategies/go-quai/consensus/misc"
 	"github.com/dominant-strategies/go-quai/core/state"
 	"github.com/dominant-strategies/go-quai/core/types"
@@ -120,10 +121,10 @@ var (
 	underpricedTxMeter = txpoolMetrics.WithLabelValues("underpriced") // Underpriced transaction
 	overflowedTxMeter  = txpoolMetrics.WithLabelValues("overflowed")  // Overflowed transaction
 
-	pendingGauge = txpoolMetrics.WithLabelValues("pending")
-	queuedGauge  = txpoolMetrics.WithLabelValues("queued")
-	localGauge   = txpoolMetrics.WithLabelValues("local")
-	slotsGauge   = txpoolMetrics.WithLabelValues("slots")
+	pendingTxGauge = txpoolMetrics.WithLabelValues("pending")
+	queuedGauge    = txpoolMetrics.WithLabelValues("queued")
+	localTxGauge   = txpoolMetrics.WithLabelValues("local")
+	slotsGauge     = txpoolMetrics.WithLabelValues("slots")
 
 	reheapTimer = metrics_config.NewTimer("Reheap", "Reheap timer")
 )
@@ -141,10 +142,17 @@ const (
 // blockChain provides the state of blockchain and current gas limit to do
 // some pre checks in tx pool and event subscribers.
 type blockChain interface {
-	CurrentBlock() *types.Block
-	GetBlock(hash common.Hash, number uint64) *types.Block
+	CurrentBlock() *types.WorkObject
+	GetBlock(hash common.Hash, number uint64) *types.WorkObject
 	StateAt(root common.Hash, utxoRoot common.Hash) (*state.StateDB, error)
 	SubscribeChainHeadEvent(ch chan<- ChainHeadEvent) event.Subscription
+	IsGenesisHash(hash common.Hash) bool
+	CheckIfEtxIsEligible(hash common.Hash, location common.Location) bool
+	Engine() consensus.Engine
+	GetHeaderOrCandidate(common.Hash, uint64) *types.WorkObject
+	GetHeader(common.Hash, uint64) *types.WorkObject
+	NodeCtx() int
+	GetHeaderByHash(common.Hash) *types.WorkObject
 }
 
 // TxPoolConfig are the configuration parameters of the transaction pool.
@@ -265,7 +273,7 @@ type TxPool struct {
 	scope       event.SubscriptionScope
 	signer      types.Signer
 	mu          sync.RWMutex
-	utxoMu      sync.RWMutex
+	qiMu        sync.RWMutex
 
 	currentState  *state.StateDB // Current state in the blockchain head
 	pendingNonces *txNoncer      // Pending state tracking virtual nonces
@@ -273,7 +281,7 @@ type TxPool struct {
 
 	locals         *accountSet                                                 // Set of local transaction to exempt from eviction rules
 	journal        *txJournal                                                  // Journal of local transaction to back up to disk
-	utxoPool       map[common.Hash]*types.QiTxWithMinerFee                     // Utxo pool to store utxo transactions
+	qiPool         map[common.Hash]*types.TxWithMinerFee                       // Qi pool to store Qi transactions
 	pending        map[common.InternalAddress]*txList                          // All currently processable transactions
 	queue          map[common.InternalAddress]*txList                          // Queued but non-processable transactions
 	beats          map[common.InternalAddress]time.Time                        // Last heartbeat from each known account
@@ -300,7 +308,7 @@ type TxPool struct {
 }
 
 type txpoolResetRequest struct {
-	oldHead, newHead *types.Header
+	oldHead, newHead *types.WorkObject
 }
 
 type newSender struct {
@@ -331,9 +339,9 @@ func NewTxPool(config TxPoolConfig, chainconfig *params.ChainConfig, chain block
 	underpricedTxMeter.Set(0)
 	overflowedTxMeter.Set(0)
 
-	pendingGauge.Set(0)
+	pendingTxGauge.Set(0)
 	queuedGauge.Set(0)
-	localGauge.Set(0)
+	localTxGauge.Set(0)
 
 	// Sanitize the input to ensure no vulnerable gas prices are set
 	config = (&config).sanitize(logger)
@@ -345,7 +353,7 @@ func NewTxPool(config TxPoolConfig, chainconfig *params.ChainConfig, chain block
 		chain:           chain,
 		signer:          types.LatestSigner(chainconfig),
 		pending:         make(map[common.InternalAddress]*txList),
-		utxoPool:        make(map[common.Hash]*types.QiTxWithMinerFee),
+		qiPool:          make(map[common.Hash]*types.TxWithMinerFee),
 		queue:           make(map[common.InternalAddress]*txList),
 		beats:           make(map[common.InternalAddress]time.Time),
 		senders:         orderedmap.New[common.Hash, common.InternalAddress](),
@@ -369,7 +377,7 @@ func NewTxPool(config TxPoolConfig, chainconfig *params.ChainConfig, chain block
 		pool.locals.add(addr)
 	}
 	pool.priced = newTxPricedList(pool.all)
-	pool.reset(nil, chain.CurrentBlock().Header())
+	pool.reset(nil, chain.CurrentBlock())
 
 	// Start the reorg loop early so it can handle requests generated during journal loading.
 	pool.wg.Add(1)
@@ -418,7 +426,7 @@ func (pool *TxPool) loop() {
 		// Handle ChainHeadEvent
 		case ev := <-pool.chainHeadCh:
 			if ev.Block != nil {
-				pool.requestReset(head.Header(), ev.Block.Header())
+				pool.requestReset(head, ev.Block)
 				head = ev.Block
 			}
 
@@ -593,11 +601,15 @@ func (pool *TxPool) ContentFrom(addr common.InternalAddress) (types.Transactions
 	return pending, queued
 }
 
-func (pool *TxPool) UTXOPoolPending() map[common.Hash]*types.QiTxWithMinerFee {
-	pool.utxoMu.RLock()
-	defer pool.utxoMu.RUnlock()
-	// to do: check fees
-	return pool.utxoPool
+func (pool *TxPool) QiPoolPending() map[common.Hash]*types.TxWithMinerFee {
+	pool.qiMu.RLock()
+	defer pool.qiMu.RUnlock()
+	// Return a copy of the pool because it is not safe to access the pool pointer directly
+	qiTxs := make(map[common.Hash]*types.TxWithMinerFee)
+	for hash, qiTx := range pool.qiPool {
+		qiTxs[hash] = qiTx
+	}
+	return qiTxs
 }
 
 // Pending retrieves all currently processable transactions, grouped by origin
@@ -861,7 +873,7 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (replaced bool, err e
 		pool.priced.Removed(pool.all.RemoteToLocals(pool.locals)) // Migrate the remotes if it's marked as local first time.
 	}
 	if isLocal {
-		localGauge.Add(1)
+		localTxGauge.Add(1)
 	}
 	pool.journalTx(internal, tx)
 	pool.queueTxEvent(tx)
@@ -958,7 +970,7 @@ func (pool *TxPool) promoteTx(addr common.InternalAddress, hash common.Hash, tx 
 		pendingReplaceMeter.Add(1)
 	} else {
 		// Nothing was replaced, bump the pending counter
-		pendingGauge.Add(1)
+		pendingTxGauge.Add(1)
 	}
 	// Set the potentially new pending nonce and notify any subsystems of the new tx
 	pool.pendingNonces.set(addr, tx.Nonce()+1)
@@ -1036,12 +1048,12 @@ func (pool *TxPool) addTxs(txs []*types.Transaction, local, sync bool) []error {
 			continue
 		}
 		if tx.Type() == types.QiTxType {
-			if err := pool.addUtxoTx(tx); err != nil {
+			if err := pool.addQiTx(tx, true); err != nil {
 				errs[i] = err
 			}
 			continue
 		}
-		if tx.To().IsInQiLedgerScope() {
+		if tx.To() != nil && tx.To().IsInQiLedgerScope() {
 			errs[i] = common.MakeErrQiAddress(tx.To().Hex())
 			invalidTxMeter.Add(1)
 			continue
@@ -1069,12 +1081,6 @@ func (pool *TxPool) addTxs(txs []*types.Transaction, local, sync bool) []error {
 			_, err = from.InternalAndQuaiAddress()
 			if err != nil {
 				errs[i] = err
-				invalidTxMeter.Add(1)
-				continue
-			}
-			_, err = types.Sender(pool.signer, tx)
-			if err != nil {
-				errs[i] = ErrInvalidSender
 				invalidTxMeter.Add(1)
 				continue
 			}
@@ -1108,14 +1114,17 @@ func (pool *TxPool) addTxs(txs []*types.Transaction, local, sync bool) []error {
 	return errs
 }
 
-func (pool *TxPool) addUtxoTx(tx *types.Transaction) error {
-	pool.utxoMu.RLock()
-	if _, hasTx := pool.utxoPool[tx.Hash()]; hasTx {
-		pool.utxoMu.RUnlock()
+// addQiTx adds a Qi transaction to the Qi pool.
+// If the mempool lock is already held by the caller, the caller must set grabLock to false.
+// If the mempool lock is not held by the caller, the caller must set grabLock to true.
+func (pool *TxPool) addQiTx(tx *types.Transaction, grabLock bool) error {
+	pool.qiMu.RLock()
+	if _, hasTx := pool.qiPool[tx.Hash()]; hasTx {
+		pool.qiMu.RUnlock()
 		return ErrAlreadyKnown
 	}
 
-	pool.utxoMu.RUnlock()
+	pool.qiMu.RUnlock()
 
 	location := pool.chainconfig.Location
 	currentBlock := pool.chain.CurrentBlock()
@@ -1128,38 +1137,45 @@ func (pool *TxPool) addUtxoTx(tx *types.Transaction) error {
 	if etxPLimit < params.ETXPLimitMin {
 		etxPLimit = params.ETXPLimitMin
 	}
-	pool.mu.RLock() // need to readlock the whole pool because we are reading the current state
-	fee, _, err := ProcessQiTx(tx, false, pool.currentState, &gp, new(uint64), pool.signer, location, *pool.chainconfig.ChainID, &etxRLimit, &etxPLimit)
+	if grabLock {
+		pool.mu.RLock() // need to readlock the whole pool because we are reading the current state
+	}
+	fee, _, err := ProcessQiTx(tx, pool.chain, false, pool.chain.CurrentBlock(), pool.currentState, &gp, new(uint64), pool.signer, location, *pool.chainconfig.ChainID, &etxRLimit, &etxPLimit)
 	if err != nil {
 		pool.mu.RUnlock()
 		pool.logger.WithFields(logrus.Fields{
 			"tx":  tx.Hash().String(),
 			"err": err,
-		}).Error("Invalid utxo tx")
+		}).Error("Invalid qi tx")
 		return err
 	}
-	pool.mu.RUnlock()
-
-	pool.utxoMu.Lock()
-	pool.utxoPool[tx.Hash()] = &types.QiTxWithMinerFee{tx, fee}
-	pool.utxoMu.Unlock()
+	if grabLock {
+		pool.mu.RUnlock()
+	}
+	txWithMinerFee, err := types.NewTxWithMinerFee(tx, nil, fee)
+	if err != nil {
+		return err
+	}
+	pool.qiMu.Lock()
+	pool.qiPool[tx.Hash()] = txWithMinerFee
+	pool.qiMu.Unlock()
 	pool.logger.WithFields(logrus.Fields{
 		"tx":  tx.Hash().String(),
 		"fee": fee,
-	}).Info("Added utxo tx to pool")
+	}).Info("Added qi tx to pool")
 	return nil
 }
 
-func (pool *TxPool) RemoveUtxoTx(tx *types.Transaction) {
-	pool.utxoMu.Lock()
-	delete(pool.utxoPool, tx.Hash())
-	pool.utxoMu.Unlock()
+func (pool *TxPool) RemoveQiTx(tx *types.Transaction) {
+	pool.qiMu.Lock()
+	delete(pool.qiPool, tx.Hash())
+	pool.qiMu.Unlock()
 }
 
 // Mempool lock must be held.
-func (pool *TxPool) removeUtxoTxsLocked(txs []*types.Transaction) {
+func (pool *TxPool) removeQiTxsLocked(txs []*types.Transaction) {
 	for _, tx := range txs {
-		delete(pool.utxoPool, tx.Hash())
+		delete(pool.qiPool, tx.Hash())
 	}
 }
 
@@ -1170,7 +1186,7 @@ func (pool *TxPool) addTxsLocked(txs []*types.Transaction, local bool) ([]error,
 	errs := make([]error, len(txs))
 	for i, tx := range txs {
 		if tx.Type() == types.QiTxType {
-			errs[i] = pool.addUtxoTx(tx)
+			errs[i] = pool.addQiTx(tx, false)
 			continue
 		}
 		replaced, err := pool.add(tx, local)
@@ -1246,7 +1262,7 @@ func (pool *TxPool) removeTx(hash common.Hash, outofbound bool) {
 		pool.priced.Removed(1)
 	}
 	if pool.locals.contains(internal) {
-		localGauge.Dec()
+		localTxGauge.Dec()
 	}
 	// Remove the transaction from the pending lists and reset the account nonce
 	if pending := pool.pending[internal]; pending != nil {
@@ -1263,7 +1279,7 @@ func (pool *TxPool) removeTx(hash common.Hash, outofbound bool) {
 			// Update the account nonce if needed
 			pool.pendingNonces.setIfLower(internal, tx.Nonce())
 			// Reduce the pending counter
-			pendingGauge.Sub(float64(len(invalids) + 1))
+			pendingTxGauge.Sub(float64(len(invalids) + 1))
 			return
 		}
 	}
@@ -1282,7 +1298,7 @@ func (pool *TxPool) removeTx(hash common.Hash, outofbound bool) {
 
 // requestReset requests a pool reset to the new head block.
 // The returned channel is closed when the reset has occurred.
-func (pool *TxPool) requestReset(oldHead *types.Header, newHead *types.Header) chan struct{} {
+func (pool *TxPool) requestReset(oldHead *types.WorkObject, newHead *types.WorkObject) chan struct{} {
 	select {
 	case pool.reqResetCh <- &txpoolResetRequest{oldHead, newHead}:
 		return <-pool.reorgDoneCh
@@ -1493,7 +1509,7 @@ func (pool *TxPool) runReorg(done chan struct{}, cancel chan struct{}, reset *tx
 // reset retrieves the current state of the blockchain and ensures the content
 // of the transaction pool is valid with regard to the chain state.
 // The mempool lock must be held by the caller.
-func (pool *TxPool) reset(oldHead, newHead *types.Header) {
+func (pool *TxPool) reset(oldHead, newHead *types.WorkObject) {
 	nodeCtx := pool.chainconfig.Location.Context()
 	var start time.Time
 	if pool.reOrgCounter == c_reorgCounterThreshold {
@@ -1587,16 +1603,23 @@ func (pool *TxPool) reset(oldHead, newHead *types.Header) {
 		}
 	} else {
 		block := pool.chain.GetBlock(newHead.Hash(), newHead.Number(pool.chainconfig.Location.Context()).Uint64())
-		pool.utxoMu.Lock()
-		pool.removeUtxoTxsLocked(block.QiTransactions())
-		pool.utxoMu.Unlock()
-		pool.logger.WithField("count", len(block.QiTransactions())).Debug("Removed utxo txs from pool")
+		pool.qiMu.Lock()
+		pool.removeQiTxsLocked(block.QiTransactionsWithoutCoinbase())
+		pool.qiMu.Unlock()
+		pool.logger.WithField("count", len(block.QiTransactionsWithoutCoinbase())).Debug("Removed qi txs from pool")
 	}
 	// Initialize the internal state to the current head
 	if newHead == nil {
-		newHead = pool.chain.CurrentBlock().Header() // Special case during testing
+		newHead = pool.chain.CurrentBlock() // Special case during testing
 	}
-	statedb, err := pool.chain.StateAt(newHead.EVMRoot(), newHead.UTXORoot())
+
+	evmRoot := newHead.EVMRoot()
+	utxoRoot := newHead.UTXORoot()
+	if pool.chain.IsGenesisHash(newHead.Hash()) {
+		evmRoot = types.EmptyRootHash
+		utxoRoot = types.EmptyRootHash
+	}
+	statedb, err := pool.chain.StateAt(evmRoot, utxoRoot)
 	if err != nil {
 		pool.logger.WithField("err", err).Error("Failed to reset txpool state")
 		return
@@ -1673,7 +1696,7 @@ func (pool *TxPool) promoteExecutables(accounts []common.InternalAddress) []*typ
 		pool.priced.Removed(len(forwards) + len(drops) + len(caps))
 		queuedRateLimitMeter.Sub(float64(len(forwards) + len(drops) + len(caps)))
 		if pool.locals.contains(addr) {
-			localGauge.Sub(float64(len(forwards) + len(drops) + len(caps)))
+			localTxGauge.Sub(float64(len(forwards) + len(drops) + len(caps)))
 		}
 		// Delete the entire queue entry if it became empty.
 		if list.Empty() {
@@ -1740,9 +1763,9 @@ func (pool *TxPool) truncatePending() {
 						pool.logger.WithField("hash", hash).Trace("Removed fairness-exceeding pending transaction")
 					}
 					pool.priced.Removed(len(caps))
-					pendingGauge.Sub(float64(len(caps)))
+					pendingTxGauge.Sub(float64(len(caps)))
 					if pool.locals.contains(offenders[i]) {
-						localGauge.Sub(float64(len(caps)))
+						localTxGauge.Sub(float64(len(caps)))
 					}
 					pending--
 				}
@@ -1767,9 +1790,9 @@ func (pool *TxPool) truncatePending() {
 					pool.logger.WithField("hash", hash).Trace("Removed fairness-exceeding pending transaction")
 				}
 				pool.priced.Removed(len(caps))
-				pendingGauge.Sub(float64(len(caps)))
+				pendingTxGauge.Sub(float64(len(caps)))
 				if pool.locals.contains(addr) {
-					localGauge.Sub(float64(len(caps)))
+					localTxGauge.Sub(float64(len(caps)))
 				}
 				pending--
 			}
@@ -1873,9 +1896,9 @@ func (pool *TxPool) demoteUnexecutables() {
 			pool.enqueueTx(hash, tx, false, false)
 		}
 		removedTxs := float64(len(olds) + len(drops) + len(invalids))
-		pendingGauge.Sub(removedTxs)
+		pendingTxGauge.Sub(removedTxs)
 		if pool.locals.contains(addr) {
-			localGauge.Sub(removedTxs)
+			localTxGauge.Sub(removedTxs)
 		}
 		// If there's a gap in front, alert (should never happen) and postpone all transactions
 		if list.Len() > 0 && list.txs.Get(nonce) == nil {
@@ -1887,7 +1910,7 @@ func (pool *TxPool) demoteUnexecutables() {
 				// Internal shuffle shouldn't touch the lookup set.
 				pool.enqueueTx(hash, tx, false, false)
 			}
-			pendingGauge.Sub(float64(len(gapped)))
+			pendingTxGauge.Sub(float64(len(gapped)))
 		}
 		// Delete the entire pending entry if it became empty.
 		if list.Empty() {

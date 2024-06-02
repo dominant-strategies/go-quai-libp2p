@@ -10,21 +10,22 @@ import (
 
 const (
 	// Data types for gossipsub topics
-	C_blockType       = "blocks"
+	C_workObjectType  = "blocks"
 	C_transactionType = "transactions"
 	C_headerType      = "headers"
 	C_hashType        = "hash"
 )
 
 // gets the name of the topic for the given type of data
-func TopicName(location common.Location, data interface{}) (string, error) {
+func TopicName(genesis common.Hash, location common.Location, data interface{}) (string, error) {
+	baseTopic := strings.Join([]string{genesis.String(), location.Name()}, "/")
 	switch data.(type) {
-	case *types.Block:
-		return strings.Join([]string{location.Name(), C_blockType}, "/"), nil
+	case *types.WorkObject:
+		return strings.Join([]string{baseTopic, C_workObjectType}, "/"), nil
 	case common.Hash:
-		return strings.Join([]string{location.Name(), C_hashType}, "/"), nil
+		return strings.Join([]string{baseTopic, C_hashType}, "/"), nil
 	case *types.Transaction:
-		return strings.Join([]string{location.Name(), C_transactionType}, "/"), nil
+		return strings.Join([]string{baseTopic, C_transactionType}, "/"), nil
 	default:
 		return "", ErrUnsupportedType
 	}
@@ -36,7 +37,7 @@ func getTopicType(topic string) string {
 
 // lists our peers which provide the associated topic
 func (g *PubsubManager) PeersForTopic(location common.Location, data interface{}) ([]peer.ID, error) {
-	topicName, err := TopicName(location, data)
+	topicName, err := TopicName(g.genesis, location, data)
 	if err != nil {
 		return nil, err
 	}

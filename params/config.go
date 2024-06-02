@@ -26,18 +26,18 @@ import (
 // Genesis hashes to enforce below configs on.
 var (
 	// Progpow GenesisHashes
-	ProgpowColosseumGenesisHash  = common.HexToHash("0x633892d970d243a119aca3efed3bfd7f8c4dce527dc8c64101407d1b3c78e17d")
-	ProgpowGardenGenesisHash     = common.HexToHash("0x9a727c6aab90d90b837d0b36449aa4d2b562e1dbe47d63a0bb1be4c9cc8eeb47")
-	ProgpowOrchardGenesisHash    = common.HexToHash("0x52e0168a7147bdb538a1fd11e5df2935c75d84100791188512bc68172a59ede5")
-	ProgpowLocalGenesisHash      = common.HexToHash("0x1cd62594d1bbc6c80dc6903e2ea3b52959a0b703f24198163a647845130a4471")
-	ProgpowLighthouseGenesisHash = common.HexToHash("0xbba4bcde7349d3d28678b1d95566afe8680fa5a93277b5b19644466b1063f0c9")
+	ProgpowColosseumGenesisHash  = common.HexToHash("0x72f90b6f6313e6614dc38a616d3560bd6b7609ae3d14fa9080a680b42df6c4ea")
+	ProgpowGardenGenesisHash     = common.HexToHash("0x8e7ffaeb1893e289ec046bd93a5b5de8b9a50a5fa8e2b30775555c5a6ec18a5d")
+	ProgpowOrchardGenesisHash    = common.HexToHash("0x8e7ffaeb1893e289ec046bd93a5b5de8b9a50a5fa8e2b30775555c5a6ec18a5d")
+	ProgpowLocalGenesisHash      = common.HexToHash("0x32a405efc6e32b60d666a36aee97634f4e2717538d2ae7f13ed7488f299f17db")
+	ProgpowLighthouseGenesisHash = common.HexToHash("0x8e7ffaeb1893e289ec046bd93a5b5de8b9a50a5fa8e2b30775555c5a6ec18a5d")
 
 	// Blake3GenesisHashes
-	Blake3PowColosseumGenesisHash  = common.HexToHash("0x19c4e4957fb24c081817da79ad1f51a2bfb7c0309cf6e9f729c4f10869a1497b")
-	Blake3PowGardenGenesisHash     = common.HexToHash("0xa7eb18949ab87d6f57ce96b1baad53091b2c41606e3d729b35c15fb334a0b459")
-	Blake3PowOrchardGenesisHash    = common.HexToHash("0x5a4abd23aac19475bb22045dcade36818bd33508c386ff32c8bbf147d84e61a1")
-	Blake3PowLocalGenesisHash      = common.HexToHash("0x75f5941c4eb79a5141db717928825c7d263b049755ee8f20b56aca1331103b36")
-	Blake3PowLighthouseGenesisHash = common.HexToHash("0x8be23305b4798f2acdaf7e21a68623f0785a040916e68cb2b7eddd122ac5c2be")
+	Blake3PowColosseumGenesisHash  = common.HexToHash("0x0ca6ff4426eab568de6773fb21d623d3fe6f2f0d2572c0b0b978384373e0895d")
+	Blake3PowGardenGenesisHash     = common.HexToHash("0x43af9e6e91fbf408b9c6fd423ed34e5ad0bd2154737cefc204d145ffc660fc9c")
+	Blake3PowOrchardGenesisHash    = common.HexToHash("0x43af9e6e91fbf408b9c6fd423ed34e5ad0bd2154737cefc204d145ffc660fc9c")
+	Blake3PowLocalGenesisHash      = common.HexToHash("0xe145f05594415f1e7b7fdf261d41be71f9a9e53b9d07e4ec9d2658cefc4916ab")
+	Blake3PowLighthouseGenesisHash = common.HexToHash("0x43af9e6e91fbf408b9c6fd423ed34e5ad0bd2154737cefc204d145ffc660fc9c")
 )
 
 // Different Network names
@@ -53,68 +53,58 @@ const (
 var (
 	// ColosseumChainConfig is the chain parameters to run a node on the Colosseum network.
 	ProgpowColosseumChainConfig = &ChainConfig{
-		ChainID:     big.NewInt(9000),
-		Progpow:     new(ProgpowConfig),
-		GenesisHash: ProgpowColosseumGenesisHash,
+		ChainID: big.NewInt(9000),
+		Progpow: new(ProgpowConfig),
 	}
 
 	Blake3PowColosseumChainConfig = &ChainConfig{
-		ChainID:     big.NewInt(9000),
-		Blake3Pow:   new(Blake3powConfig),
-		GenesisHash: Blake3PowColosseumGenesisHash,
+		ChainID:   big.NewInt(9000),
+		Blake3Pow: new(Blake3powConfig),
 	}
 
 	// GardenChainConfig contains the chain parameters to run a node on the Garden test network.
 	ProgpowGardenChainConfig = &ChainConfig{
-		ChainID:     big.NewInt(12000),
-		Progpow:     new(ProgpowConfig),
-		GenesisHash: ProgpowGardenGenesisHash,
+		ChainID: big.NewInt(12000),
+		Progpow: new(ProgpowConfig),
 	}
 
 	Blake3PowGardenChainConfig = &ChainConfig{
-		ChainID:     big.NewInt(12000),
-		Blake3Pow:   new(Blake3powConfig),
-		GenesisHash: Blake3PowGardenGenesisHash,
+		ChainID:   big.NewInt(12000),
+		Blake3Pow: new(Blake3powConfig),
 	}
 
 	// OrchardChainConfig contains the chain parameters to run a node on the Orchard test network.
 	ProgpowOrchardChainConfig = &ChainConfig{
-		ChainID:     big.NewInt(15000),
-		Progpow:     new(ProgpowConfig),
-		GenesisHash: ProgpowOrchardGenesisHash,
+		ChainID: big.NewInt(15000),
+		Progpow: new(ProgpowConfig),
 	}
 
 	Blake3PowOrchardChainConfig = &ChainConfig{
-		ChainID:     big.NewInt(15000),
-		Blake3Pow:   new(Blake3powConfig),
-		GenesisHash: Blake3PowOrchardGenesisHash,
+		ChainID:   big.NewInt(15000),
+		Blake3Pow: new(Blake3powConfig),
 	}
 
 	// LighthouseChainConfig contains the chain parameters to run a node on the Lighthouse test network.
 	ProgpowLighthouseChainConfig = &ChainConfig{
-		ChainID:     big.NewInt(17000),
-		Blake3Pow:   new(Blake3powConfig),
-		Progpow:     new(ProgpowConfig),
-		GenesisHash: ProgpowLighthouseGenesisHash,
+		ChainID:   big.NewInt(17000),
+		Blake3Pow: new(Blake3powConfig),
+		Progpow:   new(ProgpowConfig),
 	}
 
 	Blake3PowLighthouseChainConfig = &ChainConfig{
-		ChainID:     big.NewInt(17000),
-		Blake3Pow:   new(Blake3powConfig),
-		GenesisHash: Blake3PowLighthouseGenesisHash,
+		ChainID:   big.NewInt(17000),
+		Blake3Pow: new(Blake3powConfig),
 	}
 
 	// LocalChainConfig contains the chain parameters to run a node on the Local test network.
 	ProgpowLocalChainConfig = &ChainConfig{
-		ChainID:     big.NewInt(1337),
-		Progpow:     new(ProgpowConfig),
-		GenesisHash: ProgpowLocalGenesisHash,
+		ChainID: big.NewInt(1337),
+		Progpow: new(ProgpowConfig),
 	}
 
 	Blake3PowLocalChainConfig = &ChainConfig{
-		ChainID:     big.NewInt(1337),
-		Blake3Pow:   new(Blake3powConfig),
-		GenesisHash: Blake3PowLocalGenesisHash,
+		ChainID:   big.NewInt(1337),
+		Blake3Pow: new(Blake3powConfig),
 	}
 
 	// AllProgpowProtocolChanges contains every protocol change introduced
@@ -122,9 +112,9 @@ var (
 	//
 	// This configuration is intentionally not using keyed fields to force anyone
 	// adding flags to the config to also have to set these fields.
-	AllProgpowProtocolChanges = &ChainConfig{big.NewInt(1337), "progpow", new(Blake3powConfig), new(ProgpowConfig), common.Hash{}, common.Location{}}
+	AllProgpowProtocolChanges = &ChainConfig{big.NewInt(1337), "progpow", new(Blake3powConfig), new(ProgpowConfig), common.Location{}, common.Hash{}}
 
-	TestChainConfig = &ChainConfig{big.NewInt(1), "progpow", new(Blake3powConfig), new(ProgpowConfig), common.Hash{}, common.Location{}}
+	TestChainConfig = &ChainConfig{big.NewInt(1), "progpow", new(Blake3powConfig), new(ProgpowConfig), common.Location{}, common.Hash{}}
 	TestRules       = TestChainConfig.Rules(new(big.Int))
 )
 
@@ -136,11 +126,11 @@ var (
 type ChainConfig struct {
 	ChainID *big.Int `json:"chainId"` // chainId identifies the current chain and is used for replay protection
 	// Various consensus engines
-	ConsensusEngine string
-	Blake3Pow       *Blake3powConfig `json:"blake3pow,omitempty"`
-	Progpow         *ProgpowConfig   `json:"progpow,omitempty"`
-	GenesisHash     common.Hash
-	Location        common.Location
+	ConsensusEngine    string
+	Blake3Pow          *Blake3powConfig `json:"blake3pow,omitempty"`
+	Progpow            *ProgpowConfig   `json:"progpow,omitempty"`
+	Location           common.Location
+	DefaultGenesisHash common.Hash
 }
 
 // SetLocation sets the location on the chain config

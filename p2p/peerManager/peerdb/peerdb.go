@@ -2,6 +2,8 @@ package peerdb
 
 import (
 	"os"
+	"strings"
+	"sync"
 
 	"github.com/dominant-strategies/go-quai/cmd/utils"
 	"github.com/dominant-strategies/go-quai/log"
@@ -29,11 +31,13 @@ type PeerInfo struct {
 type PeerDB struct {
 	db          *leveldb.DB
 	peerCounter int
+	mu          sync.Mutex
 }
 
 // Returns a new PeerDB instance
-func NewPeerDB(dbDirName string) (*PeerDB, error) {
-	dataDir := viper.GetString(utils.DataDirFlag.Name)
+func NewPeerDB(dbDirName string, locationName string) (*PeerDB, error) {
+	strs := []string{viper.GetString(utils.DataDirFlag.Name), locationName}
+	dataDir := strings.Join(strs, "/")
 	if _, err := os.Stat(dataDir); os.IsNotExist(err) {
 		err := os.MkdirAll(dataDir, 0755)
 		if err != nil {
@@ -58,5 +62,6 @@ func NewPeerDB(dbDirName string) (*PeerDB, error) {
 	return &PeerDB{
 		db:          db,
 		peerCounter: peerCounter,
+		mu:          sync.Mutex{},
 	}, nil
 }

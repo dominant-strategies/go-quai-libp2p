@@ -18,6 +18,7 @@
 package quai
 
 import (
+	"bytes"
 	"fmt"
 	"math/big"
 	"sync"
@@ -80,7 +81,7 @@ type Quai struct {
 
 // New creates a new Quai object (including the
 // initialisation of the common Quai object)
-func New(stack *node.Node, p2p NetworkingAPI, config *quaiconfig.Config, nodeCtx int, logger *log.Logger) (*Quai, error) {
+func New(stack *node.Node, p2p NetworkingAPI, config *quaiconfig.Config, nodeCtx int, currentExpansionNumber uint8, startingExpansionNumber uint64, genesisBlock *types.WorkObject, logger *log.Logger) (*Quai, error) {
 	// Ensure configuration values are compatible and sane
 	if config.Miner.GasPrice == nil || config.Miner.GasPrice.Cmp(common.Big0) <= 0 {
 		logger.WithFields(log.Fields{
@@ -104,13 +105,46 @@ func New(stack *node.Node, p2p NetworkingAPI, config *quaiconfig.Config, nodeCtx
 	}).Info("Allocated trie memory caches")
 
 	// Assemble the Quai object
-	chainDb, err := stack.OpenDatabaseWithFreezer("chaindata", config.DatabaseCache, config.DatabaseHandles, config.DatabaseFreezer, "eth/db/chaindata/", false)
+	chainDb, err := stack.OpenDatabaseWithFreezer("chaindata", config.DatabaseCache, config.DatabaseHandles, config.DatabaseFreezer, "eth/db/chaindata/", false, config.NodeLocation)
 	if err != nil {
 		return nil, err
 	}
-	chainConfig, _, genesisErr := core.SetupGenesisBlockWithOverride(chainDb, config.Genesis, config.NodeLocation, logger)
-	if genesisErr != nil {
-		return nil, genesisErr
+	// Only run the genesis block setup for Prime and region-0 and zone-0-0, for everything else it is setup through the expansion trigger
+	chainConfig := config.Genesis.Config
+	// This is not the normal protocol start, starting the protocol at a
+	// different expansion number is only to run experiments
+	if startingExpansionNumber > 0 {
+		var genesisErr error
+		chainConfig, _, genesisErr = core.SetupGenesisBlockWithOverride(chainDb, config.Genesis, config.NodeLocation, startingExpansionNumber, logger)
+		if genesisErr != nil {
+			return nil, genesisErr
+		}
+	} else {
+		if (config.NodeLocation.Context() == common.PRIME_CTX) ||
+			(config.NodeLocation.Region() == 0 && nodeCtx == common.REGION_CTX) ||
+			(bytes.Equal(config.NodeLocation, common.Location{0, 0}) && nodeCtx == common.ZONE_CTX) {
+			var genesisErr error
+			chainConfig, _, genesisErr = core.SetupGenesisBlockWithOverride(chainDb, config.Genesis, config.NodeLocation, startingExpansionNumber, logger)
+			if genesisErr != nil {
+				return nil, genesisErr
+			}
+		} else {
+			// This only happens during the expansion
+			if genesisBlock != nil {
+				// write the block to the database
+				rawdb.WriteWorkObject(chainDb, genesisBlock.Hash(), genesisBlock, types.BlockObject, nodeCtx)
+				rawdb.WriteHeadBlockHash(chainDb, genesisBlock.Hash())
+				// Initialize slice state for genesis knot
+				genesisTermini := types.EmptyTermini()
+				for i := 0; i < len(genesisTermini.SubTermini()); i++ {
+					genesisTermini.SetSubTerminiAtIndex(genesisBlock.Hash(), i)
+				}
+				for i := 0; i < len(genesisTermini.DomTermini()); i++ {
+					genesisTermini.SetDomTerminiAtIndex(genesisBlock.Hash(), i)
+				}
+				rawdb.WriteTermini(chainDb, genesisBlock.Hash(), genesisTermini)
+			}
+		}
 	}
 
 	logger.WithField("location", &chainConfig).Warn("Memory location of chainConfig")
@@ -135,13 +169,13 @@ func New(stack *node.Node, p2p NetworkingAPI, config *quaiconfig.Config, nodeCtx
 		ConsensusEngine: chainConfig.ConsensusEngine,
 		Blake3Pow:       chainConfig.Blake3Pow,
 		Progpow:         chainConfig.Progpow,
-		GenesisHash:     chainConfig.GenesisHash,
 		Location:        chainConfig.Location,
 	}
 	chainConfig = &newChainConfig
 
 	logger.WithField("chainConfig", config.NodeLocation).Info("Chain Config")
 	chainConfig.Location = config.NodeLocation // TODO: See why this is necessary
+	chainConfig.DefaultGenesisHash = config.DefaultGenesisHash
 	logger.WithFields(log.Fields{
 		"Ctx":          nodeCtx,
 		"NodeLocation": config.NodeLocation,
@@ -214,7 +248,7 @@ func New(stack *node.Node, p2p NetworkingAPI, config *quaiconfig.Config, nodeCtx
 	}
 
 	logger.WithField("url", quai.config.DomUrl).Info("Dom client")
-	quai.core, err = core.NewCore(chainDb, &config.Miner, quai.isLocalBlock, &config.TxPool, &config.TxLookupLimit, chainConfig, quai.config.SlicesRunning, quai.config.DomUrl, quai.config.SubUrls, quai.engine, cacheConfig, vmConfig, indexerConfig, config.Genesis, logger)
+	quai.core, err = core.NewCore(chainDb, &config.Miner, quai.isLocalBlock, &config.TxPool, &config.TxLookupLimit, chainConfig, quai.config.SlicesRunning, currentExpansionNumber, genesisBlock, quai.config.DomUrl, quai.config.SubUrls, quai.engine, cacheConfig, vmConfig, indexerConfig, config.Genesis, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -227,10 +261,6 @@ func New(stack *node.Node, p2p NetworkingAPI, config *quaiconfig.Config, nodeCtx
 
 	// Set the p2p Networking API
 	quai.p2p = p2p
-	// Subscribe to the Blocks subscription
-	quai.p2p.Subscribe(config.NodeLocation, &types.Block{})
-	quai.p2p.Subscribe(config.NodeLocation, common.Hash{})
-	quai.p2p.Subscribe(config.NodeLocation, &types.Transaction{})
 
 	quai.handler = newHandler(quai.p2p, quai.core, config.NodeLocation)
 	// Start the handler
@@ -257,9 +287,6 @@ func New(stack *node.Node, p2p NetworkingAPI, config *quaiconfig.Config, nodeCtx
 // NOTE, some of these services probably need to be moved to somewhere else.
 func (s *Quai) APIs() []rpc.API {
 	apis := quaiapi.GetAPIs(s.APIBackend)
-
-	// Append any APIs exposed explicitly by the consensus engine
-	apis = append(apis, s.engine.APIs(s.Core())...)
 
 	// Append all the local APIs and return
 	return append(apis, []rpc.API{
@@ -322,7 +349,7 @@ func (s *Quai) Etherbase() (eb common.Address, err error) {
 //
 // We regard two types of accounts as local miner account: etherbase
 // and accounts specified via `txpool.locals` flag.
-func (s *Quai) isLocalBlock(header *types.Header) bool {
+func (s *Quai) isLocalBlock(header *types.WorkObject) bool {
 	author, err := s.engine.Author(header)
 	if err != nil {
 		s.logger.WithFields(log.Fields{
@@ -356,8 +383,8 @@ func (s *Quai) isLocalBlock(header *types.Header) bool {
 // shouldPreserve checks whether we should preserve the given block
 // during the chain reorg depending on whether the author of block
 // is a local account.
-func (s *Quai) shouldPreserve(block *types.Block) bool {
-	return s.isLocalBlock(block.Header())
+func (s *Quai) shouldPreserve(block *types.WorkObject) bool {
+	return s.isLocalBlock(block)
 }
 
 func (s *Quai) Core() *core.Core                 { return s.core }
@@ -390,7 +417,6 @@ func (s *Quai) Stop() error {
 		close(s.closeBloomHandler)
 	}
 	s.core.Stop()
-	s.engine.Close()
 	s.chainDb.Close()
 	s.eventMux.Stop()
 	s.handler.Stop()

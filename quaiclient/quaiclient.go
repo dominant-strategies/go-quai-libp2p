@@ -97,15 +97,15 @@ type appendReturns struct {
 }
 
 // SubscribePendingHeader subscribes to notifications about the current pending block on the node.
-func (ec *Client) SubscribePendingHeader(ctx context.Context, ch chan<- *types.Header) (quai.Subscription, error) {
+func (ec *Client) SubscribePendingHeader(ctx context.Context, ch chan<- *types.WorkObject) (quai.Subscription, error) {
 	return ec.c.QuaiSubscribe(ctx, ch, "pendingHeader")
 }
 
-func (ec *Client) Append(ctx context.Context, header *types.Header, manifest types.BlockManifest, domPendingHeader *types.Header, domTerminus common.Hash, domOrigin bool, newInboundEtxs types.Transactions) (types.Transactions, bool, bool, error) {
+func (ec *Client) Append(ctx context.Context, header *types.WorkObject, manifest types.BlockManifest, domPendingHeader *types.WorkObject, domTerminus common.Hash, domOrigin bool, newInboundEtxs types.Transactions) (types.Transactions, bool, bool, error) {
 	fields := map[string]interface{}{
-		"header":           header.RPCMarshalHeader(),
+		"header":           header.RPCMarshalWorkObject(),
 		"manifest":         manifest,
-		"domPendingHeader": domPendingHeader.RPCMarshalHeader(),
+		"domPendingHeader": domPendingHeader.RPCMarshalWorkObject(),
 		"domTerminus":      domTerminus,
 		"domOrigin":        domOrigin,
 		"newInboundEtxs":   newInboundEtxs,
@@ -136,7 +136,7 @@ func (ec *Client) DownloadBlocksInManifest(ctx context.Context, hash common.Hash
 }
 
 func (ec *Client) SubRelayPendingHeader(ctx context.Context, pendingHeader types.PendingHeader, newEntropy *big.Int, location common.Location, subReorg bool, order int) {
-	data := map[string]interface{}{"header": pendingHeader.Header().RPCMarshalHeader()}
+	data := map[string]interface{}{"header": pendingHeader.WorkObject().RPCMarshalWorkObject()}
 	data["NewEntropy"] = newEntropy
 	data["termini"] = pendingHeader.Termini().RPCMarshalTermini()
 	data["Location"] = location
@@ -147,7 +147,7 @@ func (ec *Client) SubRelayPendingHeader(ctx context.Context, pendingHeader types
 }
 
 func (ec *Client) UpdateDom(ctx context.Context, oldTerminus common.Hash, pendingHeader types.PendingHeader, location common.Location) {
-	data := map[string]interface{}{"header": pendingHeader.Header().RPCMarshalHeader()}
+	data := map[string]interface{}{"header": pendingHeader.WorkObject().RPCMarshalWorkObject()}
 	data["OldTerminus"] = oldTerminus
 	data["Location"] = location
 	data["termini"] = pendingHeader.Termini().RPCMarshalTermini()
@@ -163,8 +163,9 @@ func (ec *Client) RequestDomToAppendOrFetch(ctx context.Context, hash common.Has
 	ec.c.CallContext(ctx, nil, "quai_requestDomToAppendOrFetch", data)
 }
 
-func (ec *Client) NewGenesisPendingHeader(ctx context.Context, header *types.Header) {
-	ec.c.CallContext(ctx, nil, "quai_newGenesisPendingHeader", header.RPCMarshalHeader())
+func (ec *Client) NewGenesisPendingHeader(ctx context.Context, header *types.WorkObject, domTerminus common.Hash, genesisHash common.Hash) error {
+	fields := map[string]interface{}{"header": header.RPCMarshalWorkObject(), "domTerminus": domTerminus, "genesisHash": genesisHash}
+	return ec.c.CallContext(ctx, nil, "quai_newGenesisPendingHeader", fields)
 }
 
 // GetManifest will get the block manifest ending with the parent hash
@@ -221,7 +222,7 @@ func (ec *Client) GetPendingEtxsFromSub(ctx context.Context, hash common.Hash, l
 
 func (ec *Client) SendPendingEtxsToDom(ctx context.Context, pEtxs types.PendingEtxs) error {
 	fields := make(map[string]interface{})
-	fields["header"] = pEtxs.Header.RPCMarshalHeader()
+	fields["header"] = pEtxs.Header.RPCMarshalWorkObject()
 	fields["etxs"] = pEtxs.Etxs
 	var raw json.RawMessage
 	err := ec.c.CallContext(ctx, &raw, "quai_sendPendingEtxsToDom", fields)
@@ -233,15 +234,15 @@ func (ec *Client) SendPendingEtxsToDom(ctx context.Context, pEtxs types.PendingE
 
 func (ec *Client) SendPendingEtxsRollupToDom(ctx context.Context, pEtxsRollup types.PendingEtxsRollup) error {
 	fields := make(map[string]interface{})
-	fields["header"] = pEtxsRollup.Header.RPCMarshalHeader()
+	fields["header"] = pEtxsRollup.Header.RPCMarshalWorkObject()
 	fields["etxsrollup"] = pEtxsRollup.EtxsRollup
 	var raw json.RawMessage
 	return ec.c.CallContext(ctx, &raw, "quai_sendPendingEtxsRollupToDom", fields)
 }
 
-func (ec *Client) GenerateRecoveryPendingHeader(ctx context.Context, pendingHeader *types.Header, checkpointHashes types.Termini) error {
+func (ec *Client) GenerateRecoveryPendingHeader(ctx context.Context, pendingHeader *types.WorkObject, checkpointHashes types.Termini) error {
 	fields := make(map[string]interface{})
-	fields["pendingHeader"] = pendingHeader.RPCMarshalHeader()
+	fields["pendingHeader"] = pendingHeader.RPCMarshalWorkObject()
 	fields["checkpointHashes"] = checkpointHashes.RPCMarshalTermini()
 	return ec.c.CallContext(ctx, nil, "quai_generateRecoveryPendingHeader", fields)
 }
@@ -266,16 +267,11 @@ func (ec *Client) HeaderByNumber(ctx context.Context, number string) *types.Head
 	return header
 }
 
-func (ec *Client) SetSyncTarget(ctx context.Context, header *types.Header) {
-	fields := header.RPCMarshalHeader()
-	ec.c.CallContext(ctx, nil, "quai_setSyncTarget", fields)
-}
-
 //// Miner APIS
 
 // GetPendingHeader gets the latest pending header from the chain.
-func (ec *Client) GetPendingHeader(ctx context.Context) (*types.Header, error) {
-	var pendingHeader *types.Header
+func (ec *Client) GetPendingHeader(ctx context.Context) (*types.WorkObject, error) {
+	var pendingHeader *types.WorkObject
 	err := ec.c.CallContext(ctx, &pendingHeader, "quai_getPendingHeader")
 	if err != nil {
 		return nil, err
@@ -284,8 +280,8 @@ func (ec *Client) GetPendingHeader(ctx context.Context) (*types.Header, error) {
 }
 
 // ReceiveMinedHeader sends a mined block back to the node
-func (ec *Client) ReceiveMinedHeader(ctx context.Context, header *types.Header) error {
-	data := header.RPCMarshalHeader()
+func (ec *Client) ReceiveMinedHeader(ctx context.Context, header *types.WorkObject) error {
+	data := header.RPCMarshalWorkObject()
 	return ec.c.CallContext(ctx, nil, "quai_receiveMinedHeader", data)
 }
 
@@ -382,6 +378,26 @@ func (ec *Client) EstimateGas(ctx context.Context, msg quai.CallMsg) (uint64, er
 func (ec *Client) BaseFee(ctx context.Context, txType bool) (*big.Int, error) {
 	var hex hexutil.Big
 	err := ec.c.CallContext(ctx, &hex, "quai_baseFee", txType)
+	if err != nil {
+		return nil, err
+	}
+	return (*big.Int)(&hex), nil
+}
+
+// QiRateAtBlock returns the number of Quai needed for a Qi at a given block number or hash.
+func (ec *Client) QiRateAtBlock(ctx context.Context, block interface{}) (*big.Int, error) {
+	var hex hexutil.Big
+	err := ec.c.CallContext(ctx, &hex, "quai_qiRateAtBlock", block)
+	if err != nil {
+		return nil, err
+	}
+	return (*big.Int)(&hex), nil
+}
+
+// QuaiRateAtBlock returns the number of Qi needed for a Quai at a given block number or hash.
+func (ec *Client) QuaiRateAtBlock(ctx context.Context, block interface{}) (*big.Int, error) {
+	var hex hexutil.Big
+	err := ec.c.CallContext(ctx, &hex, "quai_quaiRateAtBlock", block)
 	if err != nil {
 		return nil, err
 	}

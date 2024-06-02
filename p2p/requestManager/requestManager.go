@@ -4,8 +4,13 @@ import (
 	"crypto/rand"
 	"errors"
 	"sync"
+	"time"
 
 	"github.com/dominant-strategies/go-quai/log"
+)
+
+const (
+	C_requestTimeout = 10 * time.Second
 )
 
 var (
@@ -41,14 +46,14 @@ func (m *requestIDMap) delete(id uint32) {
 // RequestIDManager is a singleton that manages request IDs
 type requestIDManager struct {
 	mu             sync.Mutex
-	activeRequests *requestIDMap
+	activeRequests requestIDMap
 }
 
 // Returns the singleton RequestIDManager
 func NewManager() RequestManager {
 	return &requestIDManager{
 		mu:             sync.Mutex{},
-		activeRequests: &requestIDMap{},
+		activeRequests: requestIDMap{},
 	}
 }
 

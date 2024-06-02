@@ -37,7 +37,6 @@ import (
 	"github.com/dominant-strategies/go-quai/ethdb"
 	"github.com/dominant-strategies/go-quai/log"
 	"github.com/dominant-strategies/go-quai/params"
-	"github.com/dominant-strategies/go-quai/trie"
 )
 
 //go:generate gencodec -type Genesis -field-override genesisSpecMarshaling -out gen_genesis.go
@@ -88,6 +87,12 @@ type GenesisAccount struct {
 	Balance    *big.Int                    `json:"balance" gencodec:"required"`
 	Nonce      uint64                      `json:"nonce,omitempty"`
 	PrivateKey []byte                      `json:"secretKey,omitempty"` // for tests
+}
+
+type GenesisUTXO struct {
+	Denomination uint32 `json:"denomination"`
+	Index        uint32 `json:"index"`
+	Hash         string `json:"hash"`
 }
 
 // field type overrides for gencodec
@@ -156,10 +161,10 @@ func (e *GenesisMismatchError) Error() string {
 //
 // The returned chain configuration is never nil.
 func SetupGenesisBlock(db ethdb.Database, genesis *Genesis, nodeLocation common.Location, logger *log.Logger) (*params.ChainConfig, common.Hash, error) {
-	return SetupGenesisBlockWithOverride(db, genesis, nodeLocation, logger)
+	return SetupGenesisBlockWithOverride(db, genesis, nodeLocation, 0, logger)
 }
 
-func SetupGenesisBlockWithOverride(db ethdb.Database, genesis *Genesis, nodeLocation common.Location, logger *log.Logger) (*params.ChainConfig, common.Hash, error) {
+func SetupGenesisBlockWithOverride(db ethdb.Database, genesis *Genesis, nodeLocation common.Location, startingExpansionNumber uint64, logger *log.Logger) (*params.ChainConfig, common.Hash, error) {
 	if genesis != nil && genesis.Config == nil {
 		return params.AllProgpowProtocolChanges, common.Hash{}, errGenesisNoConfig
 	}
@@ -172,7 +177,7 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, genesis *Genesis, nodeLoca
 		} else {
 			logger.Info("Writing custom genesis block")
 		}
-		block, err := genesis.Commit(db, nodeLocation)
+		block, err := genesis.Commit(db, nodeLocation, startingExpansionNumber)
 		if err != nil {
 			return genesis.Config, common.Hash{}, err
 		}
@@ -186,11 +191,11 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, genesis *Genesis, nodeLoca
 			genesis = DefaultGenesisBlock()
 		}
 		// Ensure the stored genesis matches with the given one.
-		hash := genesis.ToBlock(nil).Hash()
+		hash := genesis.ToBlock(startingExpansionNumber).Hash()
 		if hash != stored {
 			return genesis.Config, hash, &GenesisMismatchError{stored, hash}
 		}
-		block, err := genesis.Commit(db, nodeLocation)
+		block, err := genesis.Commit(db, nodeLocation, startingExpansionNumber)
 		if err != nil {
 			return genesis.Config, hash, err
 		}
@@ -198,7 +203,7 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, genesis *Genesis, nodeLoca
 	}
 	// Check whether the genesis block is already written.
 	if genesis != nil {
-		hash := genesis.ToBlock(nil).Hash()
+		hash := genesis.ToBlock(startingExpansionNumber).Hash()
 		if hash != stored {
 			return genesis.Config, hash, &GenesisMismatchError{stored, hash}
 		}
@@ -261,32 +266,42 @@ func (g *Genesis) configOrDefault(ghash common.Hash) *params.ChainConfig {
 
 // ToBlock creates the genesis block and writes state of a genesis specification
 // to the given database (or discards it if nil).
-func (g *Genesis) ToBlock(db ethdb.Database) *types.Block {
-	head := types.EmptyHeader()
-	head.SetNonce(types.EncodeNonce(g.Nonce))
-	head.SetTime(g.Timestamp)
-	head.SetExtra(g.ExtraData)
-	head.SetDifficulty(g.Difficulty)
-	head.SetGasLimit(g.GasLimit)
-	head.SetGasUsed(0)
-	head.SetCoinbase(common.Zero)
-	head.SetBaseFee(new(big.Int).SetUint64(params.InitialBaseFee))
+func (g *Genesis) ToBlock(startingExpansionNumber uint64) *types.WorkObject {
+	head := types.EmptyHeader(g.Config.Location.Context())
+	head.WorkObjectHeader().SetNonce(types.EncodeNonce(g.Nonce))
+	head.WorkObjectHeader().SetDifficulty(g.Difficulty)
+	head.WorkObjectHeader().SetTime(g.Timestamp)
+	head.Header().SetExtra(g.ExtraData)
+	head.Header().SetGasLimit(g.GasLimit)
+	head.Header().SetGasUsed(0)
+	if startingExpansionNumber > 0 {
+		// Fill each byte with 0xFF to set all bits to 1
+		var etxEligibleSlices common.Hash
+		for i := 0; i < common.HashLength; i++ {
+			etxEligibleSlices[i] = 0xFF
+		}
+		head.Header().SetEtxEligibleSlices(etxEligibleSlices)
+	} else {
+		head.Header().SetEtxEligibleSlices(common.Hash{})
+	}
+	head.Header().SetCoinbase(common.Zero)
+	head.Header().SetBaseFee(new(big.Int).SetUint64(params.InitialBaseFee))
+	head.Header().SetEtxSetHash(types.EmptyEtxSetHash)
 	if g.GasLimit == 0 {
-		head.SetGasLimit(params.GenesisGasLimit)
+		head.Header().SetGasLimit(params.GenesisGasLimit)
 	}
 	for i := 0; i < common.HierarchyDepth; i++ {
 		head.SetNumber(big.NewInt(0), i)
 		head.SetParentHash(common.Hash{}, i)
 	}
-
-	return types.NewBlock(head, nil, nil, nil, nil, nil, trie.NewStackTrie(nil), g.Config.Location.Context())
+	return head
 }
 
 // Commit writes the block and state of a genesis specification to the database.
 // The block is committed as the canonical head block.
-func (g *Genesis) Commit(db ethdb.Database, nodeLocation common.Location) (*types.Block, error) {
+func (g *Genesis) Commit(db ethdb.Database, nodeLocation common.Location, startingExpansionNumber uint64) (*types.WorkObject, error) {
 	nodeCtx := nodeLocation.Context()
-	block := g.ToBlock(db)
+	block := g.ToBlock(startingExpansionNumber)
 	if block.Number(nodeCtx).Sign() != 0 {
 		return nil, fmt.Errorf("can't commit genesis block with number > 0")
 	}
@@ -294,8 +309,9 @@ func (g *Genesis) Commit(db ethdb.Database, nodeLocation common.Location) (*type
 	if config == nil {
 		config = params.AllProgpowProtocolChanges
 	}
+	rawdb.WriteGenesisHashes(db, common.Hashes{block.Hash()})
 	rawdb.WriteTermini(db, block.Hash(), types.EmptyTermini())
-	rawdb.WriteBlock(db, block, nodeCtx)
+	rawdb.WriteWorkObject(db, block.Hash(), block, types.BlockObject, nodeCtx)
 	rawdb.WriteReceipts(db, block.Hash(), block.NumberU64(nodeCtx), nil)
 	rawdb.WriteCanonicalHash(db, block.Hash(), block.NumberU64(nodeCtx))
 	rawdb.WriteHeadBlockHash(db, block.Hash())
@@ -306,8 +322,8 @@ func (g *Genesis) Commit(db ethdb.Database, nodeLocation common.Location) (*type
 
 // MustCommit writes the genesis block and state to db, panicking on error.
 // The block is committed as the canonical head block.
-func (g *Genesis) MustCommit(db ethdb.Database, nodeLocation common.Location) *types.Block {
-	block, err := g.Commit(db, nodeLocation)
+func (g *Genesis) MustCommit(db ethdb.Database, nodeLocation common.Location) *types.WorkObject {
+	block, err := g.Commit(db, nodeLocation, 0)
 	if err != nil {
 		panic(err)
 	}
@@ -315,7 +331,7 @@ func (g *Genesis) MustCommit(db ethdb.Database, nodeLocation common.Location) *t
 }
 
 // GenesisBlockForTesting creates and writes a block in which addr has the given wei balance.
-func GenesisBlockForTesting(db ethdb.Database, addr common.Address, balance *big.Int, nodeLocation common.Location) *types.Block {
+func GenesisBlockForTesting(db ethdb.Database, addr common.Address, balance *big.Int, nodeLocation common.Location) *types.WorkObject {
 	g := Genesis{
 		BaseFee: big.NewInt(params.InitialBaseFee),
 	}
@@ -416,7 +432,7 @@ func DefaultLocalGenesisBlock(consensusEngine string) *Genesis {
 			Nonce:      66,
 			ExtraData:  hexutil.MustDecode("0x11bbe8db4e347b4e8c937c1c8370e4b5ed33adb3db69cbdb7a38e1e50b1b82fb"),
 			GasLimit:   5000000,
-			Difficulty: big.NewInt(300000),
+			Difficulty: big.NewInt(100000),
 		}
 	}
 	return &Genesis{
@@ -466,4 +482,57 @@ func ReadGenesisAlloc(filename string, logger *log.Logger) map[string]GenesisAcc
 
 	// Use the parsed data
 	return data
+}
+
+func ReadGenesisQiAlloc(filename string, logger *log.Logger) map[string]GenesisUTXO {
+	jsonFile, err := os.Open(filename)
+	if err != nil {
+		logger.Error(err.Error())
+		return nil
+	}
+	defer jsonFile.Close()
+	// Read the file contents
+	byteValue, err := ioutil.ReadAll(jsonFile)
+	if err != nil {
+		logger.Error(err.Error())
+		return nil
+	}
+
+	// Parse the JSON data
+	var data map[string]GenesisUTXO
+	err = json.Unmarshal(byteValue, &data)
+	if err != nil {
+		logger.Error(err.Error())
+		return nil
+	}
+
+	// Use the parsed data
+	return data
+}
+
+// WriteGenesisUtxoSet writes the genesis utxo set to the database
+func AddGenesisUtxos(state *state.StateDB, nodeLocation common.Location, logger *log.Logger) {
+	qiAlloc := ReadGenesisQiAlloc("genallocs/gen_alloc_qi_"+nodeLocation.Name()+".json", logger)
+	// logger.WithField("alloc", len(qiAlloc)).Info("Allocating genesis accounts")
+	for addressString, utxo := range qiAlloc {
+		addr := common.HexToAddress(addressString, nodeLocation)
+		internal, err := addr.InternalAddress()
+		if err != nil {
+			logger.Error("Provided address in genesis block is out of scope")
+		}
+
+		hash := common.HexToHash(utxo.Hash)
+
+		// check if utxo.Denomination is less than uint8
+		if utxo.Denomination > 255 {
+			logger.Error("Provided denomination is larger than uint8")
+		}
+
+		newUtxo := &types.UtxoEntry{
+			Address:      internal.Bytes(),
+			Denomination: uint8(utxo.Denomination),
+		}
+
+		state.CreateUTXO(hash, uint16(utxo.Index), newUtxo)
+	}
 }

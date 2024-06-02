@@ -52,7 +52,7 @@ func NewBlockValidator(config *params.ChainConfig, headerChain *HeaderChain, eng
 // ValidateBody validates the given block's uncles and verifies the block
 // header's transaction and uncle roots. The headers are assumed to be already
 // validated at this point.
-func (v *BlockValidator) ValidateBody(block *types.Block) error {
+func (v *BlockValidator) ValidateBody(block *types.WorkObject) error {
 	nodeCtx := v.config.Location.Context()
 	// Check whether the block's known, and if not, that it's linkable
 	if nodeCtx == common.ZONE_CTX && v.hc.ProcessingState() {
@@ -74,10 +74,16 @@ func (v *BlockValidator) ValidateBody(block *types.Block) error {
 		if len(block.Uncles()) != 0 {
 			return fmt.Errorf("region body has non zero uncles")
 		}
-		subManifestHash := types.DeriveSha(block.SubManifest(), trie.NewStackTrie(nil))
+		subManifestHash := types.DeriveSha(block.Manifest(), trie.NewStackTrie(nil))
 		if subManifestHash == types.EmptyRootHash || subManifestHash != header.ManifestHash(nodeCtx+1) {
 			// If we have a subordinate chain, it is impossible for the subordinate manifest to be empty
 			return ErrBadSubManifest
+		}
+		if nodeCtx == common.PRIME_CTX {
+			interlinkRootHash := types.DeriveSha(block.InterlinkHashes(), trie.NewStackTrie(nil))
+			if interlinkRootHash != header.InterlinkRootHash() {
+				return ErrBadInterlink
+			}
 		}
 	} else {
 		// Header validity is known at this point, check the uncles and transactions
@@ -101,7 +107,7 @@ func (v *BlockValidator) ValidateBody(block *types.Block) error {
 // transition, such as amount of used gas, the receipt roots and the state root
 // itself. ValidateState returns a database batch if the validation was a success
 // otherwise nil and an error is returned.
-func (v *BlockValidator) ValidateState(block *types.Block, statedb *state.StateDB, receipts types.Receipts, utxoEtxs []*types.Transaction, usedGas uint64) error {
+func (v *BlockValidator) ValidateState(block *types.WorkObject, statedb *state.StateDB, receipts types.Receipts, utxoEtxs []*types.Transaction, etxSet *types.EtxSet, usedGas uint64) error {
 	start := time.Now()
 	header := types.CopyHeader(block.Header())
 	time1 := common.PrettyDuration(time.Since(start))
@@ -134,10 +140,30 @@ func (v *BlockValidator) ValidateState(block *types.Block, statedb *state.StateD
 	}
 	emittedEtxs = append(emittedEtxs, utxoEtxs...)
 	time6 := common.PrettyDuration(time.Since(start))
+
 	// Confirm the ETXs emitted by the transactions in this block exactly match the
 	// ETXs given in the block body
 	if etxHash := types.DeriveSha(emittedEtxs, trie.NewStackTrie(nil)); etxHash != header.EtxHash() {
 		return fmt.Errorf("invalid etx hash (remote: %x local: %x)", header.EtxHash(), etxHash)
+	}
+	// Confirm the ETX set used by the block matches the ETX set given in the block body
+	// This is the resulting ETX set after all ETXs in the block have been processed
+	// After validation, this ETX set should be stored in the database
+	if etxSet != nil {
+		etxSetHash := etxSet.Hash()
+		if etxSetHash != block.EtxSetHash() {
+			return fmt.Errorf("expected ETX Set hash %x does not match block ETXSetHash %x", etxSetHash, block.EtxSetHash())
+		}
+	} else {
+		if block.EtxSetHash() != types.EmptyEtxSetHash {
+			return fmt.Errorf("expected ETX Set hash %x does not match block ETXSetHash %x", types.EmptyRootHash, block.EtxSetHash())
+		}
+	}
+
+	// Check that the UncledS in the header matches the S from the block
+	expectedUncledS := v.engine.UncledLogS(block)
+	if expectedUncledS.Cmp(header.UncledS()) != 0 {
+		return fmt.Errorf("invalid uncledS (remote: %x local: %x)", header.UncledS(), expectedUncledS)
 	}
 	v.hc.logger.WithFields(log.Fields{
 		"t1": time1,
@@ -153,7 +179,17 @@ func (v *BlockValidator) ValidateState(block *types.Block, statedb *state.StateD
 // CalcGasLimit computes the gas limit of the next block after parent. It aims
 // to keep the baseline gas close to the provided target, and increase it towards
 // the target if the baseline gas is lower.
-func CalcGasLimit(parent *types.Header, gasCeil uint64) uint64 {
+func CalcGasLimit(parent *types.WorkObject, gasCeil uint64) uint64 {
+	// No Gas for TimeToStartTx days worth of zone blocks, this gives enough time to
+	// onboard new miners into the slice
+	if parent.NumberU64(common.ZONE_CTX) < params.TimeToStartTx {
+		return 0
+	}
+
+	// If parent gas is zero and we have passed the 5 day threshold, we can set the first block gas limit to min gas limit
+	if parent.GasLimit() == 0 {
+		return params.MinGasLimit
+	}
 
 	parentGasLimit := parent.GasLimit()
 
