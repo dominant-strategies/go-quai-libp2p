@@ -11,6 +11,8 @@ import (
 	"github.com/dominant-strategies/go-quai/p2p"
 	"github.com/dominant-strategies/go-quai/rpc"
 	"github.com/dominant-strategies/go-quai/trie"
+	pubsub "github.com/libp2p/go-libp2p-pubsub"
+	"github.com/libp2p/go-libp2p/core/peer"
 )
 
 // QuaiBackend implements the quai consensus protocol
@@ -87,7 +89,6 @@ func (qbe *QuaiBackend) OnNewBroadcast(sourcePeer p2p.PeerID, data interface{}, 
 		// TODO: Determine if the block information was lively or stale and rate
 		// the peer accordingly
 		backend.WriteBlock(&block)
-		return true
 	case types.Header:
 	case types.Transaction:
 		tx := data.(types.Transaction)
@@ -99,6 +100,9 @@ func (qbe *QuaiBackend) OnNewBroadcast(sourcePeer p2p.PeerID, data interface{}, 
 		backend.SendRemoteTx(&tx)
 		// TODO: Handle the error here and mark the peers accordingly
 	}
+
+	// If it was a good broadcast, mark the peer as lively
+	qbe.p2pBackend.MarkLivelyPeer(sourcePeer, nodeLocation)
 	return true
 }
 
@@ -112,6 +116,29 @@ func (qbe *QuaiBackend) GetTrieNode(hash common.Hash, location common.Location) 
 func (qbe *QuaiBackend) GetHeight(location common.Location) uint64 {
 	// Example/mock implementation
 	panic("todo")
+}
+
+func (qbe *QuaiBackend) ValidatorFunc() func(ctx context.Context, id p2p.PeerID, msg *pubsub.Message) pubsub.ValidationResult {
+	return func(ctx context.Context, id peer.ID, msg *pubsub.Message) pubsub.ValidationResult {
+		var data interface{}
+		data = msg.Message.GetData()
+		switch data.(type) {
+		case types.Block:
+			block := data.(types.Block)
+			backend := *qbe.GetBackend(block.Location())
+			if backend == nil {
+				log.Global.WithFields(log.Fields{
+					"peer":     id,
+					"hash":     block.Hash(),
+					"location": block.Location(),
+				}).Error("no backend found for this location")
+				return pubsub.ValidationReject
+			}
+		case types.Transaction:
+			return pubsub.ValidationAccept
+		}
+		return pubsub.ValidationAccept
+	}
 }
 
 func (qbe *QuaiBackend) LookupBlock(hash common.Hash, location common.Location) *types.Block {
